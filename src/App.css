@@ -9,6 +9,149 @@ button { border: 0; background: none; cursor: pointer; }
 .eyebrow { display: inline-block; color: #8d83ff; font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }
 .breadcrumbs { display: flex; align-items: center; gap: 7px; padding: 24px 0; color: #667086; font-size: 12px; }
 .breadcrumbs button:hover, .breadcrumbs span { color: #b6bdcb; }
+.data-source-note { margin-top: 18px; padding: 10px 14px; border: 1px solid #eadfd5; border-radius: 9px; background: #fff7ee; color: #9a6a42; font-size: 11px; font-weight: 600; }
+
+/* Cart */
+.cart-page { padding-bottom: 90px; }
+.cart-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 28px; align-items: start; }
+.cart-items-section { min-width: 0; }
+.cart-item-list { display: grid; gap: 14px; }
+.cart-item-card { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 14px; border: 1px solid #eadfd5; border-radius: 14px; background: #fff; box-shadow: 0 8px 25px rgba(91, 57, 29, .04); }
+.cart-item-art { padding: 0; text-align: left; }
+.cart-item-art .product-art { min-height: 120px; border-radius: 10px; }
+.cart-item-art .product-art > strong { font-size: 12px; }
+.cart-item-info { min-width: 0; }
+.cart-item-title { display: block; padding: 6px 0; color: #453a31; font: 600 18px 'Space Grotesk'; text-align: left; }
+.cart-item-info p { margin: 0; color: #8d7e72; font-size: 11px; line-height: 1.6; }
+.cart-item-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.cart-item-meta span { padding: 6px 8px; border-radius: 999px; background: #fff7ee; color: #9a6a42; font-size: 9px; font-weight: 700; }
+.cart-item-actions { margin-top: 12px; }
+.cart-item-actions button { color: #e8701e; font-size: 10px; font-weight: 700; }
+.cart-item-price { display: grid; gap: 3px; justify-items: end; min-width: 90px; }
+.cart-item-price strong { color: #3e332a; font: 700 18px 'Space Grotesk'; }
+.cart-item-price del { color: #a09287; font-size: 10px; }
+.cart-summary-card { display: grid; gap: 16px; padding: 22px; border: 1px solid #eadfd5; border-radius: 16px; background: #fff; box-shadow: 0 12px 32px rgba(91, 57, 29, .06); }
+.cart-summary-card h2 { margin: 0; color: #3e332a; font: 700 27px 'Space Grotesk'; }
+.summary-lines { display: grid; gap: 10px; }
+.summary-lines div { display: flex; justify-content: space-between; gap: 16px; color: #8d7e72; font-size: 12px; }
+.summary-lines strong { color: #4b3e34; }
+.summary-total { padding-top: 12px; border-top: 1px solid #eee3d9; font-weight: 700; }
+.summary-total strong { color: #e8701e; font-size: 18px; }
+.cart-checkout-button { width: 100%; }
+.cart-summary-card small { color: #9a8a7e; font-size: 10px; text-align: center; }
+.cart-recommend-section { margin-top: 56px; }
+.cart-recommend-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; }
+.account-continue-button { width: 100%; margin: 20px 0 2px; }
+
+/* Checkout and payment */
+.checkout-page,
+.payment-methods-page,
+.order-detail-page { padding-bottom: 92px; }
+.checkout-layout { display: grid; grid-template-columns: minmax(0, 1fr) 390px; gap: 30px; align-items: start; }
+.checkout-main,
+.payment-methods-content,
+.saved-method-list,
+.payment-form,
+.order-detail-layout,
+.purchased-list,
+.refund-form { display: grid; gap: 16px; }
+.checkout-panel,
+.checkout-summary-card,
+.payment-panel,
+.order-panel,
+.refund-panel,
+.order-success-banner { border: 1px solid #eadfd5; border-radius: 16px; background: #fff; box-shadow: 0 12px 32px rgba(91, 57, 29, .06); }
+.checkout-panel,
+.checkout-summary-card,
+.payment-panel,
+.order-panel,
+.refund-panel { padding: 22px; }
+.checkout-panel h2,
+.checkout-summary-card h2,
+.payment-panel h2,
+.order-panel h2,
+.refund-panel h2 { margin: 7px 0 18px; color: #3e332a; font: 700 27px 'Space Grotesk'; letter-spacing: -.05em; }
+.checkout-status,
+.checkout-warning,
+.digital-note,
+.checkout-error,
+.refund-message,
+.secure-pill { display: flex; align-items: center; gap: 8px; }
+.checkout-status,
+.digital-note,
+.secure-pill { color: #e8701e; }
+.checkout-warning,
+.checkout-error { border: 1px solid #f0caa9; border-radius: 12px; background: #fff7ee; color: #8a4b20; }
+.checkout-warning { align-items: flex-start; flex-direction: column; padding: 14px; font-size: 12px; }
+.checkout-warning button,
+.secondary-link-button { color: #e8701e; font-size: 11px; font-weight: 800; }
+.checkout-status { width: max-content; max-width: 100%; padding: 9px 11px; border-radius: 999px; background: #fff3e7; font-size: 11px; font-weight: 800; }
+.payment-options { display: grid; gap: 10px; }
+.payment-options label { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid #eadfd5; border-radius: 12px; background: #fffaf5; cursor: pointer; }
+.payment-options input,
+.save-default-row input { accent-color: #ec7925; }
+.payment-options span { display: grid; gap: 3px; }
+.payment-options strong,
+.checkout-product strong,
+.saved-method-card strong,
+.purchased-item strong { color: #4b3e34; font-size: 12px; }
+.payment-options small,
+.checkout-product span,
+.saved-method-card span,
+.purchased-item span { color: #9a8a7e; font-size: 10px; }
+.new-card-fields,
+.payment-form .two-fields,
+.payment-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.new-card-fields label,
+.payment-form label,
+.refund-form label { display: grid; gap: 7px; color: #75665b; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.new-card-fields input,
+.payment-form input,
+.payment-form select,
+.refund-form textarea { width: 100%; min-height: 42px; border: 1px solid #e7dacf; border-radius: 10px; background: #fffaf5; color: #44382f; padding: 0 12px; outline: 0; }
+.refund-form textarea { min-height: 120px; padding: 12px; resize: vertical; }
+.digital-note { align-items: flex-start; padding: 18px; border: 1px solid #f0caa9; border-radius: 14px; background: #fff7ee; }
+.digital-note span { color: #9a6a42; font-size: 11px; }
+.checkout-product-list { display: grid; gap: 12px; margin-bottom: 18px; }
+.checkout-product,
+.saved-method-card,
+.purchased-item { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px; border: 1px solid #eee3d9; border-radius: 12px; background: #fffaf5; }
+.checkout-product .product-art,
+.purchased-item .product-art { min-height: 64px; border-radius: 8px; }
+.checkout-product .product-art > strong,
+.checkout-product .product-art > small,
+.checkout-product .art-label,
+.purchased-item .product-art > strong,
+.purchased-item .product-art > small,
+.purchased-item .art-label { display: none; }
+.checkout-product em,
+.purchased-item em { color: #e8701e; font-style: normal; font-weight: 800; }
+.checkout-error { margin-top: 16px; padding: 10px 12px; font-size: 11px; font-weight: 800; }
+.checkout-confirm-button,
+.payment-save-button { width: 100%; margin-top: 16px; }
+.method-icon,
+.order-success-icon { display: grid; place-items: center; border-radius: 50%; background: linear-gradient(135deg, #ffb452, #e96e1e); color: #fff; font-weight: 900; }
+.method-icon { width: 46px; height: 46px; }
+.method-info { display: grid; gap: 4px; }
+.secure-pill { justify-self: end; padding: 7px 10px; border-radius: 999px; background: #fff1e5; font-size: 10px; font-weight: 800; }
+.save-default-row { display: flex !important; align-items: center; flex-direction: row; text-transform: none !important; letter-spacing: 0 !important; }
+.order-success-banner { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 28px; margin-bottom: 24px; background: linear-gradient(135deg, #fff, #fff2e3); }
+.order-success-banner h1 { margin: 7px 0; color: #2f2721; font: 700 clamp(34px, 5vw, 58px)/1 'Space Grotesk'; letter-spacing: -.07em; }
+.order-success-banner p,
+.refund-heading p { margin: 0; color: #8d7e72; font-size: 12px; }
+.order-success-icon { width: 70px; height: 70px; }
+.order-detail-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.payment-info-grid div { display: grid; gap: 5px; padding: 12px; border-radius: 10px; background: #fffaf5; }
+.payment-info-grid span { color: #9a8a7e; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.payment-info-grid strong { color: #4b3e34; font-size: 12px; }
+.paid-status { color: #e8701e !important; }
+.purchased-item button { width: max-content; color: #e8701e; font-size: 10px; font-weight: 800; }
+.refund-panel { margin-top: 24px; }
+.refund-heading { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.refund-status-pill { height: max-content; padding: 7px 10px; border-radius: 999px; background: #fff1e5; color: #e8701e; font-size: 10px; font-weight: 800; }
+.refund-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.refund-actions > button:not(.primary-button) { color: #8d7e72; font-weight: 800; }
+.refund-message { padding: 11px 12px; border: 1px solid #f0caa9; border-radius: 10px; background: #fff7ee; color: #e8701e; font-size: 11px; font-weight: 800; }
 
 /* Header */
 .announcement { height: 32px; display: flex; align-items: center; justify-content: center; gap: 30px; background: linear-gradient(90deg, #5d45d8, #8d56d2); color: #fff; font-size: 11px; letter-spacing: .03em; }
@@ -496,10 +639,27 @@ footer { border-color: #eadfd5; background: #fff; }
   .site-header nav { border-color: #eadfd5; background: #fff; }
   .listing-layout aside { background: #fff; }
   .account-panel { min-height: 700px; }
+  .cart-layout,
+  .checkout-layout,
+  .order-detail-layout { grid-template-columns: 1fr; }
+  .cart-summary-card { position: static; }
+  .cart-recommend-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 650px) {
   .profile-heading { grid-template-columns: auto 1fr; }
   .profile-heading > button { grid-column: 1 / -1; }
   .profile-library { grid-template-columns: 1fr; }
+  .cart-item-card,
+  .checkout-product,
+  .saved-method-card,
+  .purchased-item { grid-template-columns: 1fr; }
+  .cart-item-price,
+  .secure-pill { justify-items: start; justify-self: start; }
+  .cart-recommend-grid,
+  .new-card-fields,
+  .payment-form .two-fields,
+  .payment-info-grid { grid-template-columns: 1fr; }
+  .order-success-banner,
+  .refund-heading { align-items: flex-start; flex-direction: column; }
 }

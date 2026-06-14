@@ -11,6 +11,20 @@ In the project directory, you can run:
 Runs the app in the development mode.\
 Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
 
+The frontend reads products from the backend at:
+
+```text
+http://localhost:3001/api/inft3050/Product
+```
+
+To use a different backend address, create a `.env` file and set:
+
+```text
+REACT_APP_API_BASE_URL=http://localhost:3001
+```
+
+If the backend is not running, the page falls back to demo product data.
+
 The page will reload when you make changes.\
 You may also see any lint errors in the console.
 
