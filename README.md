@@ -6,6 +6,24 @@ This project was bootstrapped with [Create React App](https://github.com/faceboo
 
 In the project directory, you can run:
 
+## Backend Product API
+
+This frontend can load product data from the INFT3050 course backend API.
+
+Expected local backend:
+
+```text
+http://localhost:3001/api/inft3050/Product
+```
+
+The app also reads `Stocktake` for price/stock information and `Genre` for product categories when those endpoints are available. Product subcategories are mapped from the provided database `SubGenre` values, with optional support for the course subgenre endpoints when they are available. If the backend is not running, the app falls back to the local demo products in `src/data.js` so the page does not fail.
+
+To use a different backend address, create a `.env` file and set:
+
+```text
+REACT_APP_API_BASE_URL=http://localhost:3001
+```
+
 ### `npm start`
 
 Runs the app in the development mode.\

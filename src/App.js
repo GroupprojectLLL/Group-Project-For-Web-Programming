@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
-import { categories, products } from './data';
+import { categories, products as demoProducts } from './data';
+import { API_ROOT, fetchProducts } from './api/products';
 
 const iconPaths = {
   search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.2 4.2" /></>,
@@ -57,13 +58,32 @@ function Logo({ onClick }) {
   );
 }
 
-const navigationMenus = [
+const fallbackNavigationMenus = [
   { label: 'E-books', items: ['Fiction', 'Mystery', 'Design', 'Wellbeing'] },
   { label: 'Games', items: ['Adventure', 'Action', 'Racing', 'Puzzle', 'Simulation'] },
   { label: 'Movies & TV', items: ['Documentary', 'Thriller', 'Animation'] },
 ];
 
-function Header({ navigate, search, setSearch }) {
+const categoryOrder = ['E-books', 'Games', 'Movies & TV'];
+
+function buildNavigationMenus(products) {
+  return categoryOrder.map((categoryName) => {
+    const fallbackMenu = fallbackNavigationMenus.find((menu) => menu.label === categoryName);
+    const items = [...new Set(
+      products
+        .filter((product) => product.category === categoryName)
+        .map((product) => product.subCategory || product.type)
+        .filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b));
+
+    return {
+      label: categoryName,
+      items: items.length ? items : fallbackMenu?.items || [],
+    };
+  });
+}
+
+function Header({ navigate, navigationMenus, search, setSearch }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const submitSearch = (event) => {
     event.preventDefault();
@@ -100,7 +120,7 @@ function Header({ navigate, search, setSearch }) {
               <div className="nav-dropdown">
                 <strong>{menu.label}</strong>
                 <button onClick={() => navigate('listing', menu.label)}>View all {menu.label}</button>
-                {menu.items.map((item) => <button onClick={() => navigate('listing', menu.label)} key={item}>{item}</button>)}
+                {menu.items.map((item) => <button onClick={() => navigate('listing', menu.label, item)} key={item}>{item}</button>)}
               </div>
             </div>
           ))}
@@ -163,7 +183,9 @@ function ProductCard({ product, onView, onAdd, layout = 'grid' }) {
   );
 }
 
-function HomePage({ navigate, viewProduct, addToCart }) {
+function HomePage({ navigate, viewProduct, addToCart, products }) {
+  const featuredProduct = products[0] || demoProducts[0];
+
   return (
     <main>
       <section className="hero page-shell">
@@ -172,7 +194,7 @@ function HomePage({ navigate, viewProduct, addToCart }) {
           <h1>Lose yourself in the <em>unknown.</em></h1>
           <p>Chart a course through a beautiful fractured galaxy in this award-winning story adventure.</p>
           <div className="hero-actions">
-            <button className="primary-button" onClick={() => viewProduct(products[0])}>Explore Nebula Protocol <Icon name="arrow" /></button>
+            <button className="primary-button" onClick={() => viewProduct(featuredProduct)}>Explore {featuredProduct.title} <Icon name="arrow" /></button>
           </div>
         </div>
         <div className="hero-visual" aria-hidden="true">
@@ -221,23 +243,29 @@ function HomePage({ navigate, viewProduct, addToCart }) {
   );
 }
 
-function ListingPage({ category, search, viewProduct, addToCart }) {
+function ListingPage({ category, subCategory, search, viewProduct, addToCart, products }) {
   const [sort, setSort] = useState('Popular');
 
   const visibleProducts = useMemo(() => {
     let result = products.filter((product) =>
       (category === 'All products' || product.category === category) &&
+      (subCategory === 'All subcategories' || product.subCategory === subCategory || product.type === subCategory) &&
       (!search || product.title.toLowerCase().includes(search.toLowerCase()))
     );
     if (sort === 'Price: Low') result = [...result].sort((a, b) => a.price - b.price);
     if (sort === 'Rating') result = [...result].sort((a, b) => b.rating - a.rating);
     return result;
-  }, [category, search, sort]);
+  }, [category, products, search, sort, subCategory]);
+
+  const listingTitle = search ? `Results for "${search}"` : subCategory !== 'All subcategories' ? subCategory : category;
+  const listingDescription = subCategory !== 'All subcategories' && category !== 'All products'
+    ? `${visibleProducts.length} ${subCategory} titles in ${category}.`
+    : `${visibleProducts.length} hand-picked titles ready to download.`;
 
   return (
     <main className="listing-page page-shell">
       <div className="listing-title">
-        <div><span className="eyebrow">The digital shelf</span><h1>{search ? `Results for "${search}"` : category}</h1><p>{visibleProducts.length} hand-picked titles ready to download.</p></div>
+        <div><span className="eyebrow">The digital shelf</span><h1>{listingTitle}</h1><p>{listingDescription}</p></div>
         <div className="listing-controls">
           <label className="sort-select">Sort by:<select value={sort} onChange={(event) => setSort(event.target.value)}><option>Popular</option><option>Rating</option><option>Price: Low</option></select><Icon name="chevron" size={14} /></label>
           <button className="view-mode"><Icon name="grid" size={18} /></button>
@@ -321,7 +349,7 @@ function Field({ label, type = 'text', placeholder, defaultValue }) {
   return <label className="form-field"><span>{label}</span><input type={type} placeholder={placeholder} defaultValue={defaultValue} /></label>;
 }
 
-function AccountPage() {
+function AccountPage({ products }) {
   const [view, setView] = useState('login');
   const [loggedIn, setLoggedIn] = useState(false);
   const [message, setMessage] = useState('');
@@ -408,12 +436,32 @@ function Footer({ navigate }) {
   );
 }
 
+function DataSourceNotice({ status, error }) {
+  if (status === 'live') return null;
+
+  return (
+    <div className={`data-source-note data-source-${status} page-shell`}>
+      {status === 'loading' ? (
+        <span>Connecting to StoreDB Product API...</span>
+      ) : (
+        <span>Using demo products because the StoreDB Product API is unavailable. Expected API: {API_ROOT}/Product</span>
+      )}
+      {error && <small>{error}</small>}
+    </div>
+  );
+}
+
 function App() {
   const [page, setPage] = useState(window.location.hash.replace('#', '') || 'home');
   const [category, setCategory] = useState('All products');
-  const [selectedProduct, setSelectedProduct] = useState(products[0]);
+  const [subCategory, setSubCategory] = useState('All subcategories');
+  const [products, setProducts] = useState(demoProducts);
+  const [selectedProduct, setSelectedProduct] = useState(demoProducts[0]);
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState('');
+  const [dataStatus, setDataStatus] = useState('loading');
+  const [dataError, setDataError] = useState('');
+  const navigationMenus = useMemo(() => buildNavigationMenus(products), [products]);
 
   useEffect(() => {
     const onHashChange = () => setPage(window.location.hash.replace('#', '') || 'home');
@@ -421,8 +469,39 @@ function App() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  const navigate = (nextPage, nextCategory) => {
-    if (nextCategory) setCategory(nextCategory);
+  useEffect(() => {
+    let ignore = false;
+
+    fetchProducts()
+      .then((apiProducts) => {
+        if (ignore) return;
+        setProducts(apiProducts);
+        setSelectedProduct(apiProducts[0] || demoProducts[0]);
+        setDataStatus('live');
+        setDataError('');
+      })
+      .catch((error) => {
+        if (ignore) return;
+        setProducts(demoProducts);
+        setSelectedProduct(demoProducts[0]);
+        setDataStatus('fallback');
+        setDataError(error.message);
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const navigate = (nextPage, nextCategory, nextSubCategory) => {
+    if (nextPage === 'listing') {
+      setCategory(nextCategory || 'All products');
+      setSubCategory(nextSubCategory || 'All subcategories');
+    } else if (nextCategory) {
+      setCategory(nextCategory);
+      setSubCategory(nextSubCategory || 'All subcategories');
+    }
+
     window.location.hash = nextPage;
     setPage(nextPage);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -440,11 +519,12 @@ function App() {
 
   return (
     <div className="app">
-      <Header navigate={navigate} search={search} setSearch={setSearch} />
-      {page === 'home' && <HomePage navigate={navigate} viewProduct={viewProduct} addToCart={addToCart} />}
-      {page === 'listing' && <ListingPage category={category} search={search} viewProduct={viewProduct} addToCart={addToCart} />}
+      <Header navigate={navigate} navigationMenus={navigationMenus} search={search} setSearch={setSearch} />
+      <DataSourceNotice status={dataStatus} error={dataError} />
+      {page === 'home' && <HomePage navigate={navigate} viewProduct={viewProduct} addToCart={addToCart} products={products} />}
+      {page === 'listing' && <ListingPage category={category} subCategory={subCategory} search={search} viewProduct={viewProduct} addToCart={addToCart} products={products} />}
       {page === 'detail' && <ProductDetailPage product={selectedProduct} addToCart={addToCart} navigate={navigate} />}
-      {page === 'account' && <AccountPage />}
+      {page === 'account' && <AccountPage products={products} />}
       <Footer navigate={navigate} />
       <div className={`toast ${toast ? 'show' : ''}`}><Icon name="check" size={16} />{toast}</div>
     </div>
