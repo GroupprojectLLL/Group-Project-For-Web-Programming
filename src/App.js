@@ -345,40 +345,107 @@ function ProductDetailPage({ product, addToCart, navigate }) {
   );
 }
 
-function Field({ label, type = 'text', placeholder, defaultValue }) {
-  return <label className="form-field"><span>{label}</span><input type={type} placeholder={placeholder} defaultValue={defaultValue} /></label>;
+function Field({
+  label,
+  type = 'text',
+  placeholder,
+  defaultValue,
+  required = true,
+  minLength,
+  value,
+  onChange,
+  autoComplete,
+}) {
+  const valueProps = value === undefined ? { defaultValue } : { value, onChange };
+
+  return (
+    <label className="form-field">
+      <span>{label}</span>
+      <input
+        type={type}
+        placeholder={placeholder}
+        required={required}
+        minLength={minLength}
+        autoComplete={autoComplete}
+        {...valueProps}
+      />
+    </label>
+  );
 }
 
 function AccountPage({ products }) {
   const [view, setView] = useState('login');
   const [loggedIn, setLoggedIn] = useState(false);
   const [message, setMessage] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [registerError, setRegisterError] = useState('');
   const submit = (event, nextView, nextMessage) => {
     event.preventDefault();
     setMessage(nextMessage);
     if (nextView === 'profile') setLoggedIn(true);
     setView(nextView);
   };
+  const submitRegistration = (event) => {
+    event.preventDefault();
+
+    if (registerPassword !== confirmPassword) {
+      setRegisterError('Passwords do not match. Please enter the same password in both fields.');
+      return;
+    }
+
+    setRegisterError('');
+    setRegisterPassword('');
+    setConfirmPassword('');
+    setMessage('Your new account is ready. Please sign in.');
+    setView('login');
+  };
 
   const panels = {
     login: (
       <form className="account-form" onSubmit={(event) => submit(event, 'profile', 'Welcome back. You are signed in.')}>
         <span className="eyebrow">Welcome back</span><h2>Sign in to your account</h2><p>Access your library, wishlist, and member prices.</p>
-        <Field label="Email address" type="email" placeholder="you@example.com" /><Field label="Password" type="password" placeholder="Enter your password" />
+        <Field label="Email address" type="email" placeholder="you@example.com" autoComplete="email" />
+        <Field label="Password" type="password" placeholder="Enter your password" minLength={8} autoComplete="current-password" />
         <div className="form-row"><label className="remember"><input type="checkbox" /> Remember me</label></div>
         <button className="primary-button form-submit">Sign in <Icon name="arrow" size={17} /></button>
         <div className="login-links">
-          <button type="button" onClick={() => { setView('register'); setMessage(''); }}><span>New here?</span><strong>Register a new account</strong><Icon name="arrow" size={16} /></button>
+          <button type="button" onClick={() => { setView('register'); setMessage(''); setRegisterError(''); }}><span>New here?</span><strong>Register a new account</strong><Icon name="arrow" size={16} /></button>
           <button type="button" onClick={() => { setView('forgot'); setMessage(''); }}><span>Cannot sign in?</span><strong>Forgot your password</strong><Icon name="arrow" size={16} /></button>
         </div>
       </form>
     ),
     register: (
-      <form className="account-form" onSubmit={(event) => submit(event, 'login', 'Your new account is ready. Please sign in.')}>
-        <button className="account-back" type="button" onClick={() => { setView('login'); setMessage(''); }}><Icon name="arrow" size={15} /> Back to login</button>
+      <form className="account-form" onSubmit={submitRegistration}>
+        <button className="account-back" type="button" onClick={() => { setView('login'); setMessage(''); setRegisterError(''); }}><Icon name="arrow" size={15} /> Back to login</button>
         <span className="eyebrow">Join the community</span><h2>Create your account</h2><p>Build a library of stories you will love.</p>
         <div className="two-fields"><Field label="First name" placeholder="Morgan" /><Field label="Last name" placeholder="Lee" /></div>
-        <Field label="Email address" type="email" placeholder="you@example.com" /><Field label="Password" type="password" placeholder="At least 8 characters" />
+        <Field label="Email address" type="email" placeholder="you@example.com" autoComplete="email" />
+        <Field
+          label="Password"
+          type="password"
+          placeholder="At least 8 characters"
+          minLength={8}
+          value={registerPassword}
+          onChange={(event) => {
+            setRegisterPassword(event.target.value);
+            setRegisterError('');
+          }}
+          autoComplete="new-password"
+        />
+        <Field
+          label="Confirm password"
+          type="password"
+          placeholder="Enter the same password"
+          minLength={8}
+          value={confirmPassword}
+          onChange={(event) => {
+            setConfirmPassword(event.target.value);
+            setRegisterError('');
+          }}
+          autoComplete="new-password"
+        />
+        {registerError && <div className="form-message" role="alert">{registerError}</div>}
         <label className="terms"><input type="checkbox" required /><span>I agree to the Terms of Service and Privacy Policy.</span></label>
         <button className="primary-button form-submit">Create account <Icon name="arrow" size={17} /></button>
       </form>
@@ -387,7 +454,7 @@ function AccountPage({ products }) {
       <form className="account-form" onSubmit={(event) => submit(event, 'login', 'Password reset instructions have been sent.')}>
         <button className="account-back" type="button" onClick={() => { setView('login'); setMessage(''); }}><Icon name="arrow" size={15} /> Back to login</button>
         <span className="eyebrow">Account recovery</span><h2>Reset your password</h2><p>Enter your account email and we will send you a secure reset link.</p>
-        <Field label="Email address" type="email" placeholder="you@example.com" />
+        <Field label="Email address" type="email" placeholder="you@example.com" autoComplete="email" />
         <button className="primary-button form-submit">Send reset link <Icon name="mail" size={17} /></button>
       </form>
     ),
