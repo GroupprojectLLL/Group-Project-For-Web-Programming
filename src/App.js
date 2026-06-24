@@ -4,6 +4,18 @@ import { categories, products as demoProducts } from './data';
 import { API_ROOT, fetchProducts } from './api/products';
 import PlaceholderPage from './pages/PlaceholderPage';
 import zhsgLogo from './assets/zhsg-logo.png';
+import coverApex from './assets/product-covers/cover-apex.png';
+import coverCalm from './assets/product-covers/cover-calm.png';
+import coverHabit from './assets/product-covers/cover-habit.png';
+import coverNebula from './assets/product-covers/cover-nebula.png';
+import coverNeon from './assets/product-covers/cover-neon.png';
+import coverNight from './assets/product-covers/cover-night.png';
+import coverParallel from './assets/product-covers/cover-parallel.png';
+import coverQuiet from './assets/product-covers/cover-quiet.png';
+import coverSignal from './assets/product-covers/cover-signal.png';
+import coverSolaris from './assets/product-covers/cover-solaris.png';
+import coverWeekend from './assets/product-covers/cover-weekend.png';
+import coverWorlds from './assets/product-covers/cover-worlds.png';
 
 const iconPaths = {
   search: <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.2 4.2" /></>,
@@ -21,6 +33,23 @@ const iconPaths = {
   close: <><path d="m6 6 12 12M18 6 6 18" /></>,
   lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
   mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>,
+  minus: <path d="M6 12h12" />,
+  plus: <><path d="M12 6v12" /><path d="M6 12h12" /></>,
+};
+
+const productCoverImages = {
+  apex: coverApex,
+  calm: coverCalm,
+  habit: coverHabit,
+  nebula: coverNebula,
+  neon: coverNeon,
+  night: coverNight,
+  parallel: coverParallel,
+  quiet: coverQuiet,
+  signal: coverSignal,
+  solaris: coverSolaris,
+  weekend: coverWeekend,
+  worlds: coverWorlds,
 };
 
 function Icon({ name, size = 20 }) {
@@ -221,16 +250,17 @@ function Header({ navigate, navigationMenus, search, setSearch, cartCount }) {
   );
 }
 
-function ProductArt({ product, className = '' }) {
+function getProductCover(product) {
+  return product.imageUrl || product.coverImage || product.image || product.raw?.ImageUrl || product.raw?.Image || productCoverImages[product.art] || coverNebula;
+}
+
+function ProductArt({ product, className = '', showTitle = true }) {
   return (
-    <div className={`product-art art-${product.art} ${className}`}>
-      <span className="art-orbit orbit-one" />
-      <span className="art-orbit orbit-two" />
-      <span className="art-grid" />
+    <figure className={`product-art art-${product.art || 'nebula'} ${className}`}>
+      <img className="product-cover-image" src={getProductCover(product)} alt={`${product.title} cover`} loading="lazy" />
       <span className="art-label">{product.type}</span>
-      <strong>{product.title}</strong>
-      <small>ZEHAOSHANGOU ORIGINAL</small>
-    </div>
+      {showTitle && <figcaption>{product.title}</figcaption>}
+    </figure>
   );
 }
 
@@ -248,12 +278,14 @@ function SectionHeading({ eyebrow, title, description, action, onAction }) {
 }
 
 function ProductCard({ product, onView, onAdd, layout = 'grid' }) {
-  const saving = Math.round((1 - product.price / product.oldPrice) * 100);
+  const saving = Number(product.oldPrice || 0) > Number(product.price || 0)
+    ? Math.round((1 - product.price / product.oldPrice) * 100)
+    : 0;
   return (
     <article className={`product-card product-card-${layout}`}>
       <button className="cover-button" onClick={() => onView(product)}>
         <ProductArt product={product} />
-        <span className="discount-pill">-{saving}%</span>
+        {saving > 0 && <span className="discount-pill">-{saving}%</span>}
       </button>
       <div className="product-card-body">
         <div className="product-meta"><span>{product.category}</span><span>{product.type}</span></div>
@@ -289,11 +321,8 @@ function HomePage({ navigate, viewProduct, addToCart, products }) {
           </div>
         </div>
         <div className="hero-visual" aria-hidden="true">
-          <span className="hero-planet" />
-          <span className="hero-ring ring-one" />
-          <span className="hero-ring ring-two" />
-          <span className="hero-ship">PV-7</span>
-          <span className="hero-price"><small>Launch price</small><strong>$19.99</strong></span>
+          <ProductArt product={featuredProduct} className="hero-cover" showTitle={false} />
+          <span className="hero-price"><small>Featured price</small><strong>${Number(featuredProduct.price || 0).toFixed(2)}</strong></span>
         </div>
       </section>
 
@@ -387,17 +416,11 @@ function ListingPage({ category, subCategory, search, viewProduct, addToCart, na
 }
 
 function ProductDetailPage({ product, addToCart, buyNow, navigate }) {
-  const [gallery, setGallery] = useState(0);
-  const galleryLabels = ['Key art', 'In-game', 'World map', 'Characters'];
-
   return (
     <main className="detail-page page-shell">
       <section className="product-intro">
         <div className="product-gallery">
-          <div className={`gallery-main gallery-${gallery}`}><ProductArt product={product} /><span className="gallery-counter">0{gallery + 1} / 04</span></div>
-          <div className="gallery-thumbs">
-            {galleryLabels.map((label, index) => <button className={gallery === index ? 'active' : ''} onClick={() => setGallery(index)} key={label}><ProductArt product={{ ...product, art: ['nebula', 'neon', 'parallel', 'solaris'][index] }} /><span>{label}</span></button>)}
-          </div>
+          <div className="gallery-main"><ProductArt product={product} /></div>
         </div>
         <div className="product-info">
           <span className="eyebrow">{product.category} / {product.type}</span>
@@ -412,9 +435,9 @@ function ProductDetailPage({ product, addToCart, buyNow, navigate }) {
           </div>
           <div className="detail-facts">
             <div><span>Delivery</span><strong>Instant download</strong></div>
-            <div><span>License</span><strong>Personal use</strong></div>
-            <div><span>Platform</span><strong>Windows / macOS</strong></div>
-            <div><span>File size</span><strong>18.6 GB</strong></div>
+            <div><span>Category</span><strong>{product.category}</strong></div>
+            <div><span>Subcategory</span><strong>{product.type}</strong></div>
+            <div><span>Stock</span><strong>{product.stockQuantity === 0 ? 'Check availability' : product.stockQuantity ? `${product.stockQuantity} available` : product.badge}</strong></div>
           </div>
           <div className="secure-note"><span><strong>Secure checkout</strong> 7-day refund policy on unused downloads</span></div>
         </div>
@@ -423,21 +446,12 @@ function ProductDetailPage({ product, addToCart, buyNow, navigate }) {
       <section className="detail-description">
         <div>
           <span className="eyebrow">About this title</span>
-          <h2>A small ship. A very big universe.</h2>
-          <p>{product.description} Every choice opens a new path, every destination has a story, and no two journeys unfold in quite the same way.</p>
-          <p>Created by a close-knit independent team, {product.title} pairs a memorable original score with hand-crafted environments and accessible, rewarding play.</p>
+          <h2>Product information</h2>
+          <p>{product.description}</p>
+          <p>This product record is displayed through the current storefront flow and can be added to the cart for checkout.</p>
         </div>
         <div className="feature-list">
-          {['A rich story shaped by your choices', 'A fully original atmospheric soundtrack', 'Optimized for keyboard and controller', 'Includes all launch-day bonus content'].map((feature, index) => <span key={feature}><strong>{String(index + 1).padStart(2, '0')}</strong>{feature}</span>)}
-        </div>
-      </section>
-
-      <section className="reviews-section">
-        <SectionHeading eyebrow="Player reviews" title="Loved across the galaxy" description="Verified reviews from zehaoshangou customers." />
-        <div className="review-grid">
-          {[['Ari K.', 'Beautiful from start to finish. I kept stopping just to look around.'], ['Jordan M.', 'Smart writing, satisfying exploration, and an incredible soundtrack.']].map(([name, quote]) => (
-            <article key={name}><Rating value={5} reviews={0} compact /><p>"{quote}"</p><div><span><strong>{name}</strong><small>Verified purchase</small></span></div></article>
-          ))}
+          {['Image-based product cover', 'Cart and checkout ready', 'Instant digital delivery', 'Order detail after payment'].map((feature, index) => <span key={feature}><strong>{String(index + 1).padStart(2, '0')}</strong>{feature}</span>)}
         </div>
       </section>
     </main>
@@ -602,7 +616,7 @@ function AccountPage({ products, onAuth, checkoutPending, navigate }) {
 }
 
 function getOrderTotals(items) {
-  const subtotal = items.reduce((sum, product) => sum + Number(product.price || 0), 0);
+  const subtotal = items.reduce((sum, product) => sum + Number(product.price || 0) * Number(product.quantity || 1), 0);
   const discount = subtotal >= 50 ? subtotal * 0.1 : 0;
   const tax = 0;
   return {
@@ -613,8 +627,9 @@ function getOrderTotals(items) {
   };
 }
 
-function CartPage({ products, cart, user, navigate, viewProduct, removeFromCart, addToCart }) {
+function CartPage({ products, cart, user, navigate, viewProduct, removeFromCart, changeCartQuantity, addToCart }) {
   const { subtotal, discount, total } = getOrderTotals(cart);
+  const totalQuantity = cart.reduce((sum, product) => sum + Number(product.quantity || 1), 0);
   const recommendedProducts = products
     .filter((product) => !cart.some((item) => String(item.id) === String(product.id)))
     .slice(0, 3);
@@ -639,14 +654,14 @@ function CartPage({ products, cart, user, navigate, viewProduct, removeFromCart,
         <div className="cart-items-section">
           <SectionHeading
             eyebrow="Cart items"
-            title={`${cart.length} item${cart.length === 1 ? '' : 's'} selected`}
+            title={`${totalQuantity} item${totalQuantity === 1 ? '' : 's'} selected`}
             description="All products are delivered digitally after payment."
           />
 
           {cart.length ? (
             <div className="cart-item-list">
-              {cart.map((product, index) => (
-                <article className="cart-item-card" key={`${product.id}-${index}`}>
+              {cart.map((product) => (
+                <article className="cart-item-card" key={product.id}>
                   <button className="cart-item-art" onClick={() => viewProduct(product)}>
                     <ProductArt product={product} />
                   </button>
@@ -664,12 +679,31 @@ function CartPage({ products, cart, user, navigate, viewProduct, removeFromCart,
                     </div>
 
                     <div className="cart-item-actions">
-                      <button onClick={() => removeFromCart(index)}>Remove</button>
+                      <div className="quantity-control" aria-label={`${product.title} quantity`}>
+                        <button
+                          type="button"
+                          onClick={() => changeCartQuantity(product.id, -1)}
+                          disabled={Number(product.quantity || 1) <= 1}
+                          aria-label={`Decrease ${product.title} quantity`}
+                        >
+                          <Icon name="minus" size={14} />
+                        </button>
+                        <span>{product.quantity || 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => changeCartQuantity(product.id, 1)}
+                          aria-label={`Increase ${product.title} quantity`}
+                        >
+                          <Icon name="plus" size={14} />
+                        </button>
+                      </div>
+                      <button onClick={() => removeFromCart(product.id)}>Remove</button>
                     </div>
                   </div>
 
                   <div className="cart-item-price">
-                    <strong>${Number(product.price || 0).toFixed(2)}</strong>
+                    <strong>${(Number(product.price || 0) * Number(product.quantity || 1)).toFixed(2)}</strong>
+                    <span>${Number(product.price || 0).toFixed(2)} each</span>
                     {Number(product.oldPrice || 0) > Number(product.price || 0) && <del>${Number(product.oldPrice || 0).toFixed(2)}</del>}
                   </div>
                 </article>
@@ -773,7 +807,7 @@ function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
       id: `ORD-${Date.now().toString().slice(-6)}`,
       paymentId: `PAY-${Date.now().toString().slice(-6)}`,
       user,
-      items: cart,
+      items: cart.map((product) => ({ ...product })),
       paymentMethod,
       subtotal,
       discount,
@@ -879,14 +913,14 @@ function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
           <span className="eyebrow">Order summary</span>
           <h2>Summary</h2>
           <div className="checkout-product-list">
-            {cart.map((product, index) => (
-              <div className="checkout-product" key={`${product.id}-${index}`}>
+            {cart.map((product) => (
+              <div className="checkout-product" key={product.id}>
                 <ProductArt product={product} />
                 <div>
                   <strong>{product.title}</strong>
-                  <span>{product.category} / {product.type}</span>
+                  <span>{product.category} / {product.type} / Qty {product.quantity || 1}</span>
                 </div>
-                <em>${Number(product.price || 0).toFixed(2)}</em>
+                <em>${(Number(product.price || 0) * Number(product.quantity || 1)).toFixed(2)}</em>
               </div>
             ))}
           </div>
@@ -1026,15 +1060,15 @@ function OrderDetailPage({ order, navigate }) {
           <span className="eyebrow">Purchased products</span>
           <h2>Digital items</h2>
           <div className="purchased-list">
-            {order.items.map((product, index) => (
-              <div className="purchased-item" key={`${product.id}-${index}`}>
+            {order.items.map((product) => (
+              <div className="purchased-item" key={product.id}>
                 <ProductArt product={product} />
                 <div>
                   <strong>{product.title}</strong>
-                  <span>{product.category} / {product.type}</span>
+                  <span>{product.category} / {product.type} / Qty {product.quantity || 1}</span>
                   <button onClick={() => navigate('account')}>Open in My Library <Icon name="arrow" size={14} /></button>
                 </div>
-                <em>${Number(product.price || 0).toFixed(2)}</em>
+                <em>${(Number(product.price || 0) * Number(product.quantity || 1)).toFixed(2)}</em>
               </div>
             ))}
           </div>
@@ -1109,6 +1143,7 @@ function App() {
   const [dataStatus, setDataStatus] = useState('loading');
   const [dataError, setDataError] = useState('');
   const navigationMenus = useMemo(() => buildNavigationMenus(products), [products]);
+  const cartCount = cartItems.reduce((sum, product) => sum + Number(product.quantity || 1), 0);
 
   useEffect(() => {
     const onHashChange = () => setPage(window.location.hash.replace('#', '') || 'home');
@@ -1160,13 +1195,32 @@ function App() {
   };
 
   const addToCart = (product) => {
-    setCartItems((items) => [...items, product]);
+    setCartItems((items) => {
+      const existingItem = items.find((item) => String(item.id) === String(product.id));
+      if (existingItem) {
+        return items.map((item) => (
+          String(item.id) === String(product.id)
+            ? { ...item, quantity: Number(item.quantity || 1) + 1 }
+            : item
+        ));
+      }
+
+      return [...items, { ...product, quantity: 1 }];
+    });
     setToast(`${product.title} added to cart`);
     window.setTimeout(() => setToast(''), 2200);
   };
 
-  const removeFromCart = (removeIndex) => {
-    setCartItems((items) => items.filter((_, index) => index !== removeIndex));
+  const changeCartQuantity = (productId, delta) => {
+    setCartItems((items) => items.map((item) => (
+      String(item.id) === String(productId)
+        ? { ...item, quantity: Math.max(1, Number(item.quantity || 1) + delta) }
+        : item
+    )));
+  };
+
+  const removeFromCart = (productId) => {
+    setCartItems((items) => items.filter((item) => String(item.id) !== String(productId)));
     setToast('Item removed from cart');
     window.setTimeout(() => setToast(''), 2200);
   };
@@ -1187,12 +1241,12 @@ function App() {
 
   return (
     <div className="app">
-      <Header navigate={navigate} navigationMenus={navigationMenus} search={search} setSearch={setSearch} cartCount={cartItems.length} />
+      <Header navigate={navigate} navigationMenus={navigationMenus} search={search} setSearch={setSearch} cartCount={cartCount} />
       <DataSourceNotice status={dataStatus} error={dataError} />
       {page === 'home' && <HomePage navigate={navigate} viewProduct={viewProduct} addToCart={addToCart} products={products} />}
       {page === 'listing' && <ListingPage category={category} subCategory={subCategory} search={search} viewProduct={viewProduct} addToCart={addToCart} navigate={navigate} products={products} />}
       {page === 'detail' && <ProductDetailPage product={selectedProduct} addToCart={addToCart} buyNow={buyNow} navigate={navigate} />}
-      {page === 'account' && <AccountPage products={products} onAuth={setUser} checkoutPending={cartItems.length > 0} navigate={navigate} />}
+      {page === 'account' && <AccountPage products={products} onAuth={setUser} checkoutPending={cartCount > 0} navigate={navigate} />}
       {page === 'cart' && (
         <CartPage
           products={products}
@@ -1201,6 +1255,7 @@ function App() {
           navigate={navigate}
           viewProduct={viewProduct}
           removeFromCart={removeFromCart}
+          changeCartQuantity={changeCartQuantity}
           addToCart={addToCart}
         />
       )}
