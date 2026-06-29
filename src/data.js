@@ -16,7 +16,7 @@ export const products = [
   {
     id: 2,
     title: 'Quiet Hours',
-    category: 'E-books',
+    category: 'Books',
     type: 'Fiction',
     price: 8.99,
     oldPrice: 14.99,
@@ -72,7 +72,7 @@ export const products = [
   {
     id: 6,
     title: 'Designing Calm',
-    category: 'E-books',
+    category: 'Books',
     type: 'Design',
     price: 10.99,
     oldPrice: 21.99,
@@ -114,7 +114,7 @@ export const products = [
   {
     id: 9,
     title: 'The Long Weekend',
-    category: 'E-books',
+    category: 'Books',
     type: 'Mystery',
     price: 7.99,
     oldPrice: 12.99,
@@ -156,7 +156,7 @@ export const products = [
   {
     id: 12,
     title: 'The Better Habit',
-    category: 'E-books',
+    category: 'Books',
     type: 'Wellbeing',
     price: 6.99,
     oldPrice: 11.99,
@@ -171,7 +171,7 @@ export const products = [
 
 export const categories = [
   {
-    name: 'E-books',
+    name: 'Books',
     description: 'Ideas worth keeping',
     count: '1,240 titles',
     accent: 'violet',

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 920" width="760" height="920" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff8ef"/>
+      <stop offset="0.55" stop-color="#fff2e3"/>
+      <stop offset="1" stop-color="#ffd2a8"/>
+    </linearGradient>
+    <radialGradient id="warm" cx="82%" cy="7%" r="45%">
+      <stop offset="0" stop-color="#ffb570" stop-opacity="0.56"/>
+      <stop offset="1" stop-color="#ffb570" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="76" height="76" patternUnits="userSpaceOnUse">
+      <path d="M76 0H0V76" fill="none" stroke="#b66e36" stroke-opacity="0.1" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="nebula" cx="42%" cy="33%" r="70%"><stop offset="0" stop-color="#27304f"/><stop offset="1" stop-color="#11172a"/></radialGradient>
+    <radialGradient id="quiet" cx="78%" cy="18%" r="70%"><stop offset="0" stop-color="#db76a0"/><stop offset="0.48" stop-color="#4a254b"/><stop offset="1" stop-color="#171225"/></radialGradient>
+    <radialGradient id="apex" cx="76%" cy="30%" r="70%"><stop offset="0" stop-color="#c58437"/><stop offset="0.52" stop-color="#332617"/><stop offset="1" stop-color="#0f100c"/></radialGradient>
+    <radialGradient id="signal" cx="76%" cy="22%" r="70%"><stop offset="0" stop-color="#37b7ae"/><stop offset="0.5" stop-color="#123a3c"/><stop offset="1" stop-color="#0a1418"/></radialGradient>
+    <filter id="cardShadow" x="-25%" y="-25%" width="150%" height="155%">
+      <feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#6a3e1e" flood-opacity="0.26"/>
+    </filter>
+    <style>
+      .brand, .title, .caption, .card-title, .card-label, .proof { font-family: "Space Grotesk", Arial, sans-serif; }
+      .title { font-size: 56px; line-height: 1.05; font-weight: 800; letter-spacing: -1.8px; fill: #332a24; }
+      .caption { font-size: 18px; fill: #6f5f53; }
+      .brand { font-size: 24px; font-weight: 800; fill: #2f2721; }
+      .accent { fill: #ef6f1f; }
+      .card-label { font-size: 14px; font-weight: 900; letter-spacing: 2px; fill: #ffffff; }
+      .card-title { font-size: 16px; font-weight: 900; letter-spacing: 0; fill: #ffffff; }
+      .proof { font-size: 14px; font-weight: 900; fill: #765f50; }
+    </style>
+  </defs>
+  <rect width="760" height="920" rx="22" fill="url(#bg)"/>
+  <rect width="760" height="920" rx="22" fill="url(#warm)"/>
+  <rect width="760" height="920" rx="22" fill="url(#grid)" opacity="0.72"/>
+
+  <text class="title" x="74" y="245">Everything you</text>
+  <text class="title" x="74" y="323">love, all in one</text>
+  <text class="title" x="74" y="401">place.</text>
+  <text class="caption" x="74" y="453">Your library follows you wherever the story goes.</text>
+
+  <g transform="translate(70 676) rotate(-5) scale(.72)" filter="url(#cardShadow)">
+    <g transform="translate(0 0) rotate(-2)">
+      <rect x="0" y="0" width="168" height="190" rx="10" fill="url(#nebula)" stroke="#25304a" stroke-width="4"/>
+      <text class="card-label" x="22" y="42">ADVENTURE</text>
+      <text class="card-title" x="22" y="148">NEBULA</text>
+      <text class="card-title" x="22" y="168">PROTOCOL</text>
+    </g>
+    <g transform="translate(178 -38) rotate(-3)">
+      <rect x="0" y="0" width="168" height="216" rx="10" fill="url(#quiet)" stroke="#28304c" stroke-width="4"/>
+      <ellipse cx="120" cy="66" rx="82" ry="36" fill="none" stroke="#fff" stroke-opacity="0.18"/>
+      <ellipse cx="125" cy="62" rx="62" ry="27" fill="none" stroke="#fff" stroke-opacity="0.14"/>
+      <text class="card-label" x="22" y="42">FICTION</text>
+      <text class="card-title" x="22" y="166" textLength="114" lengthAdjust="spacingAndGlyphs">QUIET HOURS</text>
+    </g>
+    <g transform="translate(356 2) rotate(-3)">
+      <rect x="0" y="0" width="168" height="216" rx="10" fill="url(#apex)" stroke="#28304c" stroke-width="4"/>
+      <ellipse cx="128" cy="82" rx="80" ry="34" fill="none" stroke="#fff" stroke-opacity="0.18"/>
+      <ellipse cx="132" cy="78" rx="58" ry="25" fill="none" stroke="#fff" stroke-opacity="0.14"/>
+      <text class="card-label" x="22" y="42">RACING</text>
+      <text class="card-title" x="22" y="168" textLength="118" lengthAdjust="spacingAndGlyphs">APEX CIRCUIT</text>
+    </g>
+    <g transform="translate(548 -42) rotate(-3)">
+      <rect x="0" y="0" width="168" height="216" rx="10" fill="url(#signal)" stroke="#28304c" stroke-width="4"/>
+      <ellipse cx="128" cy="78" rx="80" ry="34" fill="none" stroke="#fff" stroke-opacity="0.18"/>
+      <ellipse cx="132" cy="74" rx="58" ry="25" fill="none" stroke="#fff" stroke-opacity="0.14"/>
+      <text class="card-label" x="22" y="42">DOCUMENTARY</text>
+      <text class="card-title" x="22" y="168" textLength="122" lengthAdjust="spacingAndGlyphs">SIGNAL / NOISE</text>
+    </g>
+  </g>
+
+  <line x1="58" y1="846" x2="704" y2="846" stroke="#c89a79" stroke-opacity="0.26"/>
+  <g transform="translate(58 866)">
+    <rect x="-8" y="-7" width="305" height="42" rx="21" fill="#fffaf5" fill-opacity="0.84" stroke="#efc7a7" stroke-opacity="0.55"/>
+    <circle cx="14" cy="14" r="14" fill="#f27822" stroke="#fff" stroke-width="3"/>
+    <circle cx="36" cy="14" r="14" fill="#ffad46" stroke="#fff" stroke-width="3"/>
+    <circle cx="58" cy="14" r="14" fill="#d95c18" stroke="#fff" stroke-width="3"/>
+    <text x="9" y="19" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#fff">A</text>
+    <text x="31" y="19" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#fff">M</text>
+    <text x="54" y="19" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="#fff">J</text>
+    <text class="proof" x="84" y="19">Join 48,000+ collectors</text>
+  </g>
+</svg>
