@@ -93,6 +93,7 @@
 .pagination button { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid #222b3e; border-radius: 7px; color: #707a8f; font-size: 9px; }
 .pagination button:first-child .icon { transform: rotate(180deg); }
 .pagination button.active { border-color: #7662ee; background: #6b55df; color: white; }
+.pagination button:disabled { opacity: .42; cursor: not-allowed; }
 .pagination span { color: #505a6f; font-size: 10px; }
 .empty-state { min-height: 420px; display: grid; place-content: center; justify-items: center; border: 1px dashed #273044; border-radius: 14px; color: #6e788d; text-align: center; }
 .empty-state h3 { margin: 14px 0 4px; color: #d2d8e2; font: 600 18px 'Space Grotesk'; }
