@@ -21,3 +21,9 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# backend local runtime data
+/backend/auth/node_modules
+/backend/db
+/backend/noco
+/backend/__MACOSX
