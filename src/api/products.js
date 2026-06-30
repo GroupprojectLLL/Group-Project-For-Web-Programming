@@ -149,6 +149,16 @@ function normalizeSubCategory(product, genreId, subGenreRowsByGenreId) {
 
 function getStockInfo(stockRows, productId) {
   const matchingStock = stockRows.filter((row) => toNumber(row.ProductId ?? row.productId) === productId);
+  const preferredStock = [...matchingStock].sort((left, right) => {
+    const leftQuantity = toNumber(left.Quantity ?? left.quantity);
+    const rightQuantity = toNumber(right.Quantity ?? right.quantity);
+    const leftPrice = toNumber(left.Price ?? left.price, Number.MAX_SAFE_INTEGER);
+    const rightPrice = toNumber(right.Price ?? right.price, Number.MAX_SAFE_INTEGER);
+
+    if (leftQuantity > 0 && rightQuantity <= 0) return -1;
+    if (rightQuantity > 0 && leftQuantity <= 0) return 1;
+    return leftPrice - rightPrice;
+  })[0];
   const prices = matchingStock
     .map((row) => toNumber(row.Price ?? row.price))
     .filter((price) => price > 0);
@@ -159,6 +169,7 @@ function getStockInfo(stockRows, productId) {
   return {
     price,
     quantity,
+    stockItemId: toNumber(preferredStock?.ItemId ?? preferredStock?.itemId, null),
   };
 }
 
@@ -185,6 +196,7 @@ function normalizeProduct(product, stockRows, genreRows, subGenreRowsByGenreId, 
     description: product.Description || product.description || 'No description is available for this product.',
     published: product.Published,
     stockQuantity: stock.quantity,
+    stockItemId: stock.stockItemId,
     raw: product,
   };
 }

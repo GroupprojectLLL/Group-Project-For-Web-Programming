@@ -49,6 +49,7 @@ export default function OrderDetailPage({ order, navigate }) {
           <h2>Order {order.id}</h2>
           <div className="payment-info-grid">
             <div><span>Order ID</span><strong>{order.id}</strong></div>
+            {order.databaseOrderId && <div><span>StoreDB OrderID</span><strong>{order.databaseOrderId}</strong></div>}
             <div><span>Payment ID</span><strong>{order.paymentId}</strong></div>
             <div><span>Payment Method</span><strong>{order.paymentMethod}</strong></div>
             <div><span>Payment Date</span><strong>{order.createdAt}</strong></div>
