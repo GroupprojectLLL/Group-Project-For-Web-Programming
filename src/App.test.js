@@ -177,3 +177,31 @@ test('order detail keeps item quantity and line total after payment success', as
   expect(screen.getByText(/quantity: 2/i)).toBeInTheDocument();
   expect(screen.getAllByText(/\$39\.98/).length).toBeGreaterThan(0);
 });
+
+test('frontend sign-in currently allows entered account details without database verification', () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
+
+  fireEvent.change(screen.getByLabelText(/email address/i), {
+    target: { value: 'unregistered@example.com' },
+  });
+  fireEvent.change(screen.getByLabelText(/^password$/i), {
+    target: { value: 'password123' },
+  });
+
+  fireEvent.submit(screen.getByRole('button', { name: /^sign in/i }).closest('form'));
+
+  expect(screen.getByRole('button', { name: /continue to checkout/i })).toBeInTheDocument();
+});
+
+test('buy now starts the checkout flow for the selected product', () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
+  fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+
+  expect(screen.getByRole('heading', { name: /checkout/i })).toBeInTheDocument();
+});
