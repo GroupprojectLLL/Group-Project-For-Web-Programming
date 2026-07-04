@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 760" width="1300" height="760" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <radialGradient id="planet" cx="37%" cy="32%" r="70%">
+      <stop offset="0" stop-color="#ffc06b"/>
+      <stop offset="0.34" stop-color="#ef7f23"/>
+      <stop offset="0.68" stop-color="#8d3915"/>
+      <stop offset="1" stop-color="#3c1c0e"/>
+    </radialGradient>
+    <radialGradient id="ambient" cx="58%" cy="45%" r="56%">
+      <stop offset="0" stop-color="#ffb15d" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#f07622" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1300" height="760" fill="url(#ambient)"/>
+  <circle cx="625" cy="368" r="312" fill="url(#planet)"/>
+  <ellipse cx="650" cy="350" rx="560" ry="190" fill="none" stroke="#ffd08d" stroke-opacity="0.5" stroke-width="14" transform="rotate(-17 650 350)"/>
+</svg>

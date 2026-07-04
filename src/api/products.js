@@ -20,7 +20,7 @@ const ART_KEYS = [
 ];
 
 const CATEGORY_BY_GENRE_ID = {
-  1: 'E-books',
+  1: 'Books',
   2: 'Movies & TV',
   3: 'Games',
 };
@@ -132,11 +132,11 @@ function normalizeCategory(product, genreRows) {
   const genre = genreRows.find((row) => toNumber(row.GenreID ?? row.genreID ?? row.id) === genreId);
   const genreName = String(genre?.Name || '').toLowerCase();
 
-  if (genreName.includes('book')) return 'E-books';
+  if (genreName.includes('book')) return 'Books';
   if (genreName.includes('movie')) return 'Movies & TV';
   if (genreName.includes('game')) return 'Games';
 
-  return CATEGORY_BY_GENRE_ID[genreId] || 'E-books';
+  return CATEGORY_BY_GENRE_ID[genreId] || 'Books';
 }
 
 function normalizeSubCategory(product, genreId, subGenreRowsByGenreId) {

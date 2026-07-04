@@ -1,0 +1,282 @@
+/* Simple week-8 wireframe pages */
+.account-workspace {
+  margin-top: 28px;
+  margin-bottom: 70px;
+  padding: 18px;
+  border: 1px solid #111;
+  background: #fff;
+  color: #111;
+}
+
+.account-workspace button,
+.account-workspace input,
+.account-workspace select {
+  font: inherit;
+}
+
+.account-workspace-heading {
+  display: grid;
+  place-items: center;
+  min-height: 52px;
+  margin: 0 0 30px;
+  border: 1px solid #111;
+  background: #fff;
+}
+
+.account-workspace-heading h1 {
+  margin: 0;
+  color: #111;
+  font: 700 14px Arial, sans-serif;
+}
+
+.account-workspace-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+
+.account-side-nav {
+  min-height: 590px;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding: 12px 6px;
+  border: 1px solid #111;
+  background: #fff;
+}
+
+.side-nav-section-label {
+  margin-bottom: 18px;
+  padding: 0;
+  color: #111;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.account-side-nav button {
+  min-height: 17px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: #111;
+  font-size: 14px;
+  line-height: 1.1;
+  text-align: left;
+}
+
+.account-side-nav button.active {
+  font-weight: 700;
+}
+
+.account-workspace-main {
+  min-width: 0;
+  display: grid;
+  gap: 24px;
+}
+
+.workspace-section-label {
+  width: 180px;
+  padding: 8px 6px;
+  border: 1px solid #111;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.workspace-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  min-height: 54px;
+  padding: 0 6px;
+  border: 1px solid #111;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.library-toolbar label,
+.order-filter-form label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #111;
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: none;
+}
+
+.library-toolbar input,
+.library-toolbar select,
+.order-filter-form input,
+.order-filter-form select {
+  min-height: 22px;
+  padding: 0 5px;
+  border: 1px solid #111;
+  border-radius: 0;
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+}
+
+.library-toolbar button,
+.order-filter-form button {
+  min-height: 24px;
+  padding: 0 10px;
+  border: 1px solid #111;
+  border-radius: 0;
+  background: #fff;
+  color: #111;
+}
+
+.library-grid,
+.wishlist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(180px, 220px));
+  gap: 40px;
+}
+
+.owned-card,
+.wishlist-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px 18px 16px;
+  border: 1px solid #111;
+  border-radius: 24px;
+  background: #fff;
+}
+
+.cover-placeholder {
+  min-height: 82px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #111;
+  background: #fff;
+  color: #111;
+  font-size: 14px;
+}
+
+.workspace-card-copy {
+  display: grid;
+  gap: 2px;
+  min-height: 58px;
+  color: #111;
+  font-size: 12px;
+}
+
+.workspace-card-copy strong,
+.workspace-card-copy span {
+  color: #111;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.workspace-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.workspace-card-actions button,
+.order-row button,
+.workspace-pagination button {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid #111;
+  border-radius: 5px;
+  background: #fff;
+  color: #111;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.order-table {
+  display: grid;
+  gap: 10px;
+}
+
+.order-table-header,
+.order-row {
+  display: grid;
+  grid-template-columns: 1fr .8fr .8fr .7fr 1fr 1fr;
+  gap: 6px;
+  align-items: center;
+  min-height: 46px;
+  padding: 7px 6px;
+  border: 1px solid #111;
+  background: #fff;
+  color: #111;
+  font-size: 14px;
+}
+
+.order-table-header {
+  font-weight: 700;
+}
+
+.order-row span {
+  color: #111;
+}
+
+.workspace-pagination {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 28px;
+}
+
+@media (max-width: 900px) {
+  .account-workspace-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .account-side-nav {
+    min-height: auto;
+  }
+
+  .library-grid,
+  .wishlist-grid {
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
+  }
+
+  .order-table-header,
+  .order-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 650px) {
+  .account-workspace {
+    padding: 12px;
+  }
+
+  .library-grid,
+  .wishlist-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace-panel {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 10px;
+  }
+
+  .library-toolbar label,
+  .order-filter-form label,
+  .library-toolbar input,
+  .library-toolbar select,
+  .order-filter-form input,
+  .order-filter-form select,
+  .library-toolbar button,
+  .order-filter-form button {
+    width: 100%;
+  }
+
+  .order-table-header,
+  .order-row {
+    grid-template-columns: 1fr;
+  }
+}
