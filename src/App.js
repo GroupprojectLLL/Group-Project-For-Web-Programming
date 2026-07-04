@@ -15,6 +15,9 @@ import CartPage from './pages/CartPage';
 import CheckoutPage from './pages/CheckoutPage';
 import PaymentMethodsPage from './pages/PaymentMethodsPage';
 import OrderDetailPage from './pages/OrderDetailPage';
+import WishlistPage from './pages/WishlistPage';
+import OrderHistoryPage from './pages/OrderHistoryPage';
+import MyLibraryPage from './pages/MyLibraryPage';
 import { placeholderPages } from './config/placeholderPages';
 import { buildNavigationMenus } from './utils/navigation';
 
@@ -159,6 +162,9 @@ export default function App() {
       {page === 'checkout' && <CheckoutPage cart={cartItems} user={user} navigate={navigate} onPlaceOrder={placeOrder} />}
       {page === 'payment-methods' && <PaymentMethodsPage user={user} navigate={navigate} />}
       {page === 'order-detail' && <OrderDetailPage order={latestOrder} navigate={navigate} />}
+      {page === 'wishlist' && <WishlistPage navigate={navigate} />}
+      {page === 'order-history' && <OrderHistoryPage navigate={navigate} />}
+      {page === 'my-library' && <MyLibraryPage navigate={navigate} />}
       {placeholder && <PlaceholderPage title={placeholder.title} description={placeholder.description} actions={placeholder.actions} navigate={navigate} />}
       <Footer navigate={navigate} />
       <div className={`toast ${toast ? 'show' : ''}`}><Icon name="check" size={16} />{toast}</div>

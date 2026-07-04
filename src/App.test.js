@@ -7,9 +7,9 @@ beforeEach(() => {
   global.fetch = jest.fn(() => new Promise(() => {}));
 });
 
-test('renders zehaoshangou home page', () => {
+test('renders ZeHaoShanGou home page', () => {
   render(<App />);
-  expect(screen.getAllByText(/zehaoshangou/i).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/ZeHaoShanGou/i).length).toBeGreaterThan(0);
   expect(screen.getByText(/lose yourself/i)).toBeInTheDocument();
 });
 
@@ -72,4 +72,108 @@ test('demo products remain available when the backend API is offline', async () 
 
   expect(await screen.findByText(/using demo products because the storedb product api is unavailable/i)).toBeInTheDocument();
   expect(screen.getByText(/nebula protocol/i)).toBeInTheDocument();
+});
+
+test('cart page opens from the header and shows an empty-cart message', () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /^cart$/i }));
+
+  expect(screen.getByRole('heading', { name: /^your cart$/i, level: 1 })).toBeInTheDocument();
+  expect(screen.getByText(/your cart is empty/i)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /browse products/i })).toBeInTheDocument();
+});
+
+test('cart summary displays the selected product after add to cart', () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^cart$/i }));
+
+  expect(screen.getByRole('heading', { name: /your cart/i })).toBeInTheDocument();
+  expect(screen.getByText(/1 item selected/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/nebula protocol/i).length).toBeGreaterThan(0);
+  expect(screen.getByText(/subtotal/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/\$19\.99/).length).toBeGreaterThan(0);
+});
+
+test('duplicate add-to-cart increases quantity instead of adding another row', () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^cart$/i }));
+
+  expect(screen.getByText(/2 items selected/i)).toBeInTheDocument();
+  expect(screen.getByLabelText(/quantity for nebula protocol/i)).toHaveTextContent('2');
+  expect(screen.getAllByText(/\$39\.98/).length).toBeGreaterThan(0);
+});
+
+test('checkout from cart asks unauthenticated users to sign in', () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^cart$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /sign in to checkout/i }));
+
+  expect(screen.getByRole('heading', { name: /sign in to your account/i })).toBeInTheDocument();
+  expect(screen.getByText(/secure account access/i)).toBeInTheDocument();
+});
+
+test('forgot password page can be opened from the account page', () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
+  fireEvent.click(screen.getByRole('button', { name: /forgot your password/i }));
+
+  expect(screen.getByRole('heading', { name: /reset your password/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /send reset link/i })).toBeInTheDocument();
+});
+
+test('signed-in checkout displays new card payment fields', () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
+
+  fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'tester@example.com' } });
+  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
+  fireEvent.submit(screen.getByRole('button', { name: /^sign in/i }).closest('form'));
+
+  fireEvent.click(screen.getByRole('button', { name: /continue to checkout/i }));
+  fireEvent.click(screen.getByLabelText(/new card/i));
+
+  expect(screen.getByRole('heading', { name: /checkout/i })).toBeInTheDocument();
+  expect(screen.getByPlaceholderText(/1234 5678 9012 3456/i)).toBeInTheDocument();
+  expect(screen.getByPlaceholderText(/morgan lee/i)).toBeInTheDocument();
+  expect(screen.getByPlaceholderText(/mm \/ yy/i)).toBeInTheDocument();
+  expect(screen.getByPlaceholderText(/^123$/i)).toBeInTheDocument();
+});
+
+test('order detail keeps item quantity and line total after payment success', async () => {
+  render(<App />);
+
+  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
+  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
+
+  fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'tester@example.com' } });
+  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
+  fireEvent.submit(screen.getByRole('button', { name: /^sign in/i }).closest('form'));
+
+  fireEvent.click(screen.getByRole('button', { name: /continue to checkout/i }));
+  global.fetch.mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve({ orderId: '1001', items: [] }),
+  });
+  fireEvent.click(screen.getByRole('button', { name: /confirm payment/i }));
+
+  expect(await screen.findByRole('heading', { name: /payment successful/i })).toBeInTheDocument();
+  expect(screen.getByText(/quantity: 2/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/\$39\.98/).length).toBeGreaterThan(0);
 });

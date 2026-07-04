@@ -1,16 +1,4 @@
 export const placeholderPages = {
-  wishlist: {
-    title: 'WishlistPage',
-    description: 'Second iteration route prepared for the Wishlist Page.',
-  },
-  'order-history': {
-    title: 'OrderHistoryPage',
-    description: 'Second iteration route prepared for the Order History Page.',
-  },
-  'my-library': {
-    title: 'MyLibraryPage',
-    description: 'Second iteration route prepared for the My Library Page.',
-  },
   'admin-dashboard': {
     title: 'AdminDashboard',
     description: 'Second iteration route prepared for the Admin Dashboard.',
@@ -71,6 +59,10 @@ export const placeholderPages = {
   cookies: {
     title: 'CookiesPage',
     description: 'Cookie policy content will be added in a later iteration.',
+  },
+  settings: {
+    title: 'SettingsPage',
+    description: 'Account settings will be completed in a later iteration.',
   },
   'listing-page-2': {
     title: 'ListingPage2',
