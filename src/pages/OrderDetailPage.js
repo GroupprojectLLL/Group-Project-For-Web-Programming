@@ -49,6 +49,7 @@ export default function OrderDetailPage({ order, navigate }) {
           <h2>Order {order.id}</h2>
           <div className="payment-info-grid">
             <div><span>Order ID</span><strong>{order.id}</strong></div>
+            {order.databaseOrderId && <div><span>StoreDB OrderID</span><strong>{order.databaseOrderId}</strong></div>}
             <div><span>Payment ID</span><strong>{order.paymentId}</strong></div>
             <div><span>Payment Method</span><strong>{order.paymentMethod}</strong></div>
             <div><span>Payment Date</span><strong>{order.createdAt}</strong></div>
@@ -71,7 +72,7 @@ export default function OrderDetailPage({ order, navigate }) {
                   <div>
                     <strong>{product.title}</strong>
                     <span>{product.category} / {product.type}</span>
-                    <span>Quantity: {quantity} × ${Number(product.price || 0).toFixed(2)}</span>
+                    <span>Quantity: {quantity} x ${Number(product.price || 0).toFixed(2)}</span>
                     <button onClick={() => navigate('account')}>Open in My Library <Icon name="arrow" size={14} /></button>
                   </div>
                   <em>${lineTotal.toFixed(2)}</em>

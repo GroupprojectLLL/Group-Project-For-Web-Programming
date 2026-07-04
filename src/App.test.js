@@ -154,7 +154,7 @@ test('signed-in checkout displays new card payment fields', () => {
   expect(screen.getByPlaceholderText(/^123$/i)).toBeInTheDocument();
 });
 
-test('order detail keeps item quantity and line total after payment success', () => {
+test('order detail keeps item quantity and line total after payment success', async () => {
   render(<App />);
 
   fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
@@ -167,9 +167,13 @@ test('order detail keeps item quantity and line total after payment success', ()
   fireEvent.submit(screen.getByRole('button', { name: /^sign in/i }).closest('form'));
 
   fireEvent.click(screen.getByRole('button', { name: /continue to checkout/i }));
+  global.fetch.mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve({ orderId: '1001', items: [] }),
+  });
   fireEvent.click(screen.getByRole('button', { name: /confirm payment/i }));
 
-  expect(screen.getByRole('heading', { name: /payment successful/i })).toBeInTheDocument();
+  expect(await screen.findByRole('heading', { name: /payment successful/i })).toBeInTheDocument();
   expect(screen.getByText(/quantity: 2/i)).toBeInTheDocument();
   expect(screen.getAllByText(/\$39\.98/).length).toBeGreaterThan(0);
 });

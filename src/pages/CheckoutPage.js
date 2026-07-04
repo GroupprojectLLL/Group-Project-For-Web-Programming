@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Icon from '../components/Icon';
 import ProductArt from '../components/ProductArt';
 import { getCartItemQuantity, getCartLineTotal, getOrderTotals } from '../utils/orderTotals';
+import { createOrder } from '../api/orders';
 
 export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
   const [paymentMethod, setPaymentMethod] = useState('Visa **** 1234');
@@ -10,9 +11,10 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
   const [cardExpiry, setCardExpiry] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   const [error, setError] = useState('');
+  const [savingOrder, setSavingOrder] = useState(false);
   const { subtotal, discount, tax, total } = getOrderTotals(cart);
 
-  function confirmPayment(event) {
+  async function confirmPayment(event) {
     event.preventDefault();
 
     if (!user) {
@@ -32,7 +34,9 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
     }
 
     setError('');
-    onPlaceOrder({
+    setSavingOrder(true);
+
+    const order = {
       id: `ORD-${Date.now().toString().slice(-6)}`,
       paymentId: `PAY-${Date.now().toString().slice(-6)}`,
       user,
@@ -43,8 +47,23 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
       tax,
       total,
       createdAt: new Date().toLocaleString(),
-    });
-    navigate('order-detail');
+    };
+
+    try {
+      const savedOrder = await createOrder(order);
+
+      onPlaceOrder({
+        ...order,
+        id: `ORD-${savedOrder.orderId}`,
+        databaseOrderId: savedOrder.orderId,
+        savedItems: savedOrder.items,
+      });
+      navigate('order-detail');
+    } catch (orderError) {
+      setError(`Order could not be saved to StoreDB: ${orderError.message}`);
+    } finally {
+      setSavingOrder(false);
+    }
   }
 
   if (!cart.length) {
@@ -152,7 +171,7 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
                   <div>
                     <strong>{product.title}</strong>
                     <span>{product.category} / {product.type}</span>
-                    <span>Qty {quantity} × ${Number(product.price || 0).toFixed(2)}</span>
+                    <span>Qty {quantity} x ${Number(product.price || 0).toFixed(2)}</span>
                   </div>
                   <em>${lineTotal.toFixed(2)}</em>
                 </div>
@@ -166,8 +185,8 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
             <div className="summary-total"><span>Total</span><strong>${total.toFixed(2)}</strong></div>
           </div>
           {error && <div className="checkout-error">{error}</div>}
-          <button className="primary-button checkout-confirm-button" type="submit" disabled={!user}>
-            Confirm Payment <Icon name="arrow" />
+          <button className="primary-button checkout-confirm-button" type="submit" disabled={!user || savingOrder}>
+            {savingOrder ? 'Saving Order...' : 'Confirm Payment'} <Icon name="arrow" />
           </button>
           <small>Secure checkout. Digital delivery only.</small>
         </aside>
