@@ -5,9 +5,8 @@ import Icon from '../components/Icon';
 import ProductArt from '../components/ProductArt';
 import Rating from '../components/Rating';
 
-export default function AccountPage({ products, onAuth, checkoutPending, navigate }) {
-  const [view, setView] = useState('login');
-  const [loggedIn, setLoggedIn] = useState(false);
+export default function AccountPage({ products, user, onAuth, checkoutPending, navigate }) {
+  const [view, setView] = useState(user ? 'profile' : 'login');
   const [message, setMessage] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -16,8 +15,9 @@ export default function AccountPage({ products, onAuth, checkoutPending, navigat
     event.preventDefault();
     setMessage(nextMessage);
     if (nextView === 'profile') {
-      setLoggedIn(true);
+      setView('profile');
       onAuth?.({ name: 'Morgan Lee', email: 'morgan.lee@example.com' });
+      return;
     }
     setView(nextView);
   };
@@ -97,8 +97,8 @@ export default function AccountPage({ products, onAuth, checkoutPending, navigat
       <div className="account-form profile-view">
         <div className="profile-heading">
           <div className="profile-avatar"><span>ML</span></div>
-          <div><span className="eyebrow">Signed in</span><h2>Morgan Lee</h2><p>morgan.lee@example.com</p></div>
-          <button type="button" onClick={() => { setLoggedIn(false); onAuth?.(null); setView('login'); setMessage(''); }}>Log out</button>
+          <div><span className="eyebrow">Signed in</span><h2>{user?.name || 'Morgan Lee'}</h2><p>{user?.email || 'morgan.lee@example.com'}</p></div>
+          <button type="button" onClick={() => { onAuth?.(null); setView('login'); setMessage(''); }}>Log out</button>
         </div>
         {checkoutPending && <button className="primary-button account-continue-button" type="button" onClick={() => navigate('checkout')}>Continue to checkout <Icon name="arrow" size={17} /></button>}
         <div className="profile-stats"><div><strong>12</strong><span>Owned titles</span></div><div><strong>4</strong><span>Wishlist</span></div><div><strong>2026</strong><span>Member since</span></div></div>
@@ -126,7 +126,7 @@ export default function AccountPage({ products, onAuth, checkoutPending, navigat
         </div>
       </div>
       <div className="account-panel">
-        <div className="account-panel-label"><Icon name={loggedIn ? 'user' : 'lock'} size={17} />{loggedIn ? 'My account' : 'Secure account access'}</div>
+        <div className="account-panel-label"><Icon name={user ? 'user' : 'lock'} size={17} />{user ? 'My account' : 'Secure account access'}</div>
         {message && <div className="form-message"><Icon name="check" size={16} />{message}</div>}
         {panels[view]}
       </div>

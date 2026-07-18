@@ -60,10 +60,6 @@ export const placeholderPages = {
     title: 'CookiesPage',
     description: 'Cookie policy content will be added in a later iteration.',
   },
-  settings: {
-    title: 'SettingsPage',
-    description: 'Account settings will be completed in a later iteration.',
-  },
   'listing-page-2': {
     title: 'ListingPage2',
     description: 'Additional product-listing pagination routes are prepared for future product paging.',

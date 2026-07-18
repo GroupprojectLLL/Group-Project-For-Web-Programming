@@ -4,7 +4,7 @@ import ProductArt from '../components/ProductArt';
 import Rating from '../components/Rating';
 import SectionHeading from '../components/SectionHeading';
 
-export default function ProductDetailPage({ product, addToCart, buyNow, navigate }) {
+export default function ProductDetailPage({ product, addToCart, addToWishlist, isWishlisted, buyNow, navigate }) {
   const [gallery, setGallery] = useState(0);
   const galleryLabels = ['Key art', 'In-game', 'World map', 'Characters'];
 
@@ -26,7 +26,7 @@ export default function ProductDetailPage({ product, addToCart, buyNow, navigate
           <button className="buy-button" onClick={() => buyNow(product)}><span>Buy now</span><strong>${product.price}</strong><Icon name="arrow" /></button>
           <div className="secondary-actions">
             <button onClick={() => addToCart(product)}>Add to cart</button>
-            <button onClick={() => navigate('wishlist')}>Add to wishlist</button>
+            <button onClick={() => addToWishlist(product)}>{isWishlisted ? 'Saved in wishlist' : 'Add to wishlist'}</button>
           </div>
           <div className="detail-facts">
             <div><span>Delivery</span><strong>Instant download</strong></div>

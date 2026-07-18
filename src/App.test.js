@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import App from './App';
 
 beforeEach(() => {
   window.location.hash = '';
   window.scrollTo = jest.fn();
+  window.localStorage.removeItem('zhsg-settings');
   global.fetch = jest.fn(() => new Promise(() => {}));
 });
 
@@ -52,6 +53,51 @@ test('login fields require a valid email and an eight-character password', () =>
   expect(email).toHaveAttribute('type', 'email');
   expect(password).toBeRequired();
   expect(password).toHaveAttribute('minlength', '8');
+});
+
+test('account menu returns guests to their selected page after sign in', () => {
+  render(<App />);
+  const accountMenu = screen.getByLabelText(/account menu/i);
+
+  fireEvent.click(within(accountMenu).getByText(/^wishlist$/i).closest('button'));
+  expect(screen.getByRole('heading', { name: /sign in to your account/i })).toBeInTheDocument();
+  expect(screen.getByRole('alert')).toHaveTextContent(/please sign in first/i);
+  expect(screen.getByRole('alert')).toHaveClass('toast-error');
+
+  fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'tester@example.com' } });
+  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
+  fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+
+  expect(screen.getByRole('heading', { name: /^wishlist$/i })).toBeInTheDocument();
+  expect(within(accountMenu).getByText(/morgan\.lee@example\.com/i)).toBeInTheDocument();
+
+  fireEvent.click(within(accountMenu).getByText(/^my library$/i).closest('button'));
+  expect(screen.getByRole('heading', { name: /^my library$/i })).toBeInTheDocument();
+});
+
+test('settings are saved and applied to the library experience', () => {
+  window.location.hash = 'settings';
+  render(<App />);
+
+  fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'tester@example.com' } });
+  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
+  fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+
+  expect(screen.getByRole('heading', { name: /^settings$/i })).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText(/default library sort/i), { target: { value: 'Oldest' } });
+  fireEvent.click(screen.getByRole('checkbox', { name: /reduce interface motion/i }));
+  fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+  expect(screen.getByRole('status')).toHaveTextContent(/preferences have been saved/i);
+  expect(document.documentElement).toHaveClass('reduce-motion');
+  expect(JSON.parse(window.localStorage.getItem('zhsg-settings'))).toMatchObject({
+    librarySort: 'Oldest',
+    reduceMotion: true,
+  });
+
+  const accountMenu = screen.getByLabelText(/account menu/i);
+  fireEvent.click(within(accountMenu).getByText(/^my library$/i).closest('button'));
+  expect(screen.getByLabelText(/library sort/i)).toHaveValue('Oldest');
 });
 
 test('registration displays a clear message when passwords do not match', () => {
