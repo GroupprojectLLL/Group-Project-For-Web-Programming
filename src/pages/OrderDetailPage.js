@@ -3,7 +3,7 @@ import Icon from '../components/Icon';
 import ProductArt from '../components/ProductArt';
 import { getCartItemQuantity, getCartLineTotal } from '../utils/orderTotals';
 
-export default function OrderDetailPage({ order, navigate }) {
+export default function OrderDetailPage({ order, navigate, onRequestRefund }) {
   const [refundSubmitted, setRefundSubmitted] = useState(false);
 
   if (!order) {
@@ -23,8 +23,12 @@ export default function OrderDetailPage({ order, navigate }) {
 
   function submitRefund(event) {
     event.preventDefault();
+    onRequestRefund?.(order.id);
     setRefundSubmitted(true);
   }
+
+  const refundOpen = order.status === 'Refund Requested';
+  const refunded = order.status === 'Refunded';
 
   return (
     <main className="order-detail-page page-shell">
@@ -54,7 +58,7 @@ export default function OrderDetailPage({ order, navigate }) {
             <div><span>Payment Method</span><strong>{order.paymentMethod}</strong></div>
             <div><span>Payment Date</span><strong>{order.createdAt}</strong></div>
             <div><span>Total Paid</span><strong>${order.total.toFixed(2)}</strong></div>
-            <div><span>Status</span><strong className="paid-status">Paid</strong></div>
+            <div><span>Status</span><strong className="paid-status">{order.status || 'Completed'}</strong></div>
           </div>
         </article>
 
@@ -73,7 +77,7 @@ export default function OrderDetailPage({ order, navigate }) {
                     <strong>{product.title}</strong>
                     <span>{product.category} / {product.type}</span>
                     <span>Quantity: {quantity} x ${Number(product.price || 0).toFixed(2)}</span>
-                    <button onClick={() => navigate('account')}>Open in My Library <Icon name="arrow" size={14} /></button>
+                    <button onClick={() => navigate('my-library')}>Open in My Library <Icon name="arrow" size={14} /></button>
                   </div>
                   <em>${lineTotal.toFixed(2)}</em>
                 </div>
@@ -90,12 +94,14 @@ export default function OrderDetailPage({ order, navigate }) {
             <h2>Request a refund</h2>
             <p>Refund eligibility: available within 7 days if the product is unused.</p>
           </div>
-          <span className="refund-status-pill">Eligible</span>
+          <span className="refund-status-pill">{refunded ? 'Refunded' : refundOpen || refundSubmitted ? 'Submitted' : 'Eligible'}</span>
         </div>
         <form className="refund-form" onSubmit={submitRefund}>
           <label><span>Refund reason</span><textarea placeholder="Please describe your refund reason..." rows="5" /></label>
           <div className="refund-actions">
-            <button className="primary-button" type="submit">Submit Refund Request <Icon name="arrow" /></button>
+            <button className="primary-button" type="submit" disabled={refundOpen || refunded || refundSubmitted}>
+              {refundOpen || refundSubmitted ? 'Refund Request Submitted' : 'Submit Refund Request'} <Icon name="arrow" />
+            </button>
             <button type="button" onClick={() => navigate('home')}>Cancel</button>
           </div>
           {refundSubmitted && <div className="refund-message"><Icon name="check" size={16} />Your refund request has been submitted for admin review.</div>}

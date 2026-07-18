@@ -149,6 +149,7 @@ footer { border-color: #eadfd5; background: #fff; }
 .drawer-header > button { border-color: #e8dbd0; color: #8d7c70; }
 .empty-cart, .drawer-footer > div, .drawer-footer > small { color: #9b8b7f; }
 .toast { border-color: #efb78d; background: #fff2e7; color: #d96419; }
+.toast.toast-error { border-color: #e7a29b; background: #fff0ee; box-shadow: 0 12px 30px rgba(151, 42, 33, .18); color: #b42318; }
 
 @media (max-width: 900px) {
   .site-header nav { border-color: #eadfd5; background: #fff; }

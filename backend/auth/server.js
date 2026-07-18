@@ -26,7 +26,15 @@ const app = express();
 app.use(cookieParser());
 app.use(express.json());
 
-const origins = CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
+const defaultOrigins = [
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3002',
+  'http://127.0.0.1:3002',
+];
+const origins = CORS_ORIGINS
+  ? CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+  : defaultOrigins;
 app.use(cors({
   origin: (origin, cb) => {
     if (!origin || origins.includes(origin)) return cb(null, true);
@@ -34,6 +42,172 @@ app.use(cors({
   },
   credentials: true
 }));
+
+// ---------- ACCOUNT WORKSPACE ROUTES ----------
+const DEFAULT_ACCOUNT_WORKSPACE = {
+  wishlistProductIds: [2, 3, 4, 8, 9, 11],
+  downloadedProductIds: [],
+  orders: [
+    {
+      id: 'ORD-1001',
+      paymentId: 'PAY-1001',
+      paymentMethod: 'Visa **** 1234',
+      createdAt: '2026-05-20',
+      status: 'Completed',
+      items: [
+        { productId: 1, quantity: 1 },
+        { productId: 2, quantity: 1 },
+      ],
+    },
+    {
+      id: 'ORD-1002',
+      paymentId: 'PAY-1002',
+      paymentMethod: 'PayPal account',
+      createdAt: '2026-05-18',
+      status: 'Refund Requested',
+      items: [
+        { productId: 11, quantity: 1 },
+      ],
+    },
+    {
+      id: 'ORD-1003',
+      paymentId: 'PAY-1003',
+      paymentMethod: 'Visa **** 1234',
+      createdAt: '2026-05-12',
+      status: 'Refunded',
+      items: [
+        { productId: 3, quantity: 1 },
+      ],
+    },
+  ],
+};
+
+const accountWorkspaces = new Map();
+
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function normalizeCustomerId(customerId) {
+  return String(customerId || 'guest');
+}
+
+function getCustomerId(req) {
+  return normalizeCustomerId(req.body?.customerId || req.query?.customerId || req.user?.sub || 'guest');
+}
+
+function getAccountWorkspace(customerId) {
+  const workspaceKey = normalizeCustomerId(customerId);
+
+  if (!accountWorkspaces.has(workspaceKey)) {
+    accountWorkspaces.set(workspaceKey, cloneJson(DEFAULT_ACCOUNT_WORKSPACE));
+  }
+
+  return accountWorkspaces.get(workspaceKey);
+}
+
+function normalizeOrderForWorkspace(order) {
+  const id = String(order?.id || `ORD-${Date.now().toString().slice(-6)}`);
+  const items = Array.isArray(order?.items)
+    ? order.items
+      .map((item) => ({
+        productId: toPositiveInt(item.productId ?? item.id),
+        stockItemId: toPositiveInt(item.stockItemId),
+        quantity: Math.max(1, toPositiveInt(item.quantity) || 1),
+      }))
+      .filter((item) => item.productId)
+    : [];
+
+  return {
+    id,
+    paymentId: String(order?.paymentId || `PAY-${Date.now().toString().slice(-6)}`),
+    databaseOrderId: toPositiveInt(order?.databaseOrderId),
+    paymentMethod: String(order?.paymentMethod || 'Unknown'),
+    createdAt: String(order?.createdAt || new Date().toLocaleString()),
+    status: String(order?.status || 'Completed'),
+    subtotal: Number(order?.subtotal || 0),
+    discount: Number(order?.discount || 0),
+    tax: Number(order?.tax || 0),
+    total: Number(order?.total || 0),
+    items,
+  };
+}
+
+app.get('/account/workspace', (req, res) => {
+  res.json(cloneJson(getAccountWorkspace(getCustomerId(req))));
+});
+
+app.post('/account/wishlist', (req, res) => {
+  const productId = toPositiveInt(req.body?.productId);
+
+  if (!productId) {
+    return res.status(400).json({ error: 'productId is required' });
+  }
+
+  const workspace = getAccountWorkspace(getCustomerId(req));
+  const productIds = workspace.wishlistProductIds.map(String);
+
+  if (!productIds.includes(String(productId))) {
+    workspace.wishlistProductIds = [productId, ...workspace.wishlistProductIds];
+  }
+
+  res.status(201).json({ wishlistProductIds: workspace.wishlistProductIds });
+});
+
+app.delete('/account/wishlist/:productId', (req, res) => {
+  const productId = toPositiveInt(req.params.productId);
+  const workspace = getAccountWorkspace(getCustomerId(req));
+  workspace.wishlistProductIds = workspace.wishlistProductIds.filter((itemId) => String(itemId) !== String(productId));
+
+  res.json({ wishlistProductIds: workspace.wishlistProductIds });
+});
+
+app.post('/account/orders', (req, res) => {
+  const order = normalizeOrderForWorkspace(req.body?.order);
+
+  if (!order.items.length) {
+    return res.status(400).json({ error: 'at least one order item is required' });
+  }
+
+  const workspace = getAccountWorkspace(getCustomerId(req));
+  workspace.orders = [
+    order,
+    ...workspace.orders.filter((savedOrder) => savedOrder.id !== order.id),
+  ];
+
+  res.status(201).json({ order, orders: workspace.orders });
+});
+
+app.patch('/account/orders/:orderId/refund', (req, res) => {
+  const workspace = getAccountWorkspace(getCustomerId(req));
+  const order = workspace.orders.find((savedOrder) => savedOrder.id === req.params.orderId);
+
+  if (!order) {
+    return res.status(404).json({ error: 'order not found' });
+  }
+
+  order.status = 'Refund Requested';
+  order.refundRequestedAt = new Date().toLocaleString();
+
+  res.json({ order, orders: workspace.orders });
+});
+
+app.post('/account/downloads', (req, res) => {
+  const productId = toPositiveInt(req.body?.productId);
+
+  if (!productId) {
+    return res.status(400).json({ error: 'productId is required' });
+  }
+
+  const workspace = getAccountWorkspace(getCustomerId(req));
+  const productIds = workspace.downloadedProductIds.map(String);
+
+  if (!productIds.includes(String(productId))) {
+    workspace.downloadedProductIds = [...workspace.downloadedProductIds, productId];
+  }
+
+  res.status(201).json({ downloadedProductIds: workspace.downloadedProductIds });
+});
 
 // ---------- PROXY TO NOCODB (protected) ----------
 app.use('/api', authRequired, (req, res, next) => {
