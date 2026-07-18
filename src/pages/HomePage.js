@@ -4,24 +4,41 @@ import Icon from '../components/Icon';
 import ProductCard from '../components/ProductCard';
 import SectionHeading from '../components/SectionHeading';
 
-export default function HomePage({ navigate, viewProduct, addToCart, products }) {
-  const featuredProduct = products[0] || demoProducts[0];
+export default function HomePage({ navigate, viewProduct, addToCart, products, canShop = true }) {
+  const availableProducts = products?.length ? products : demoProducts;
+  const featuredProduct = availableProducts[0];
+  const description = featuredProduct.description || 'Discover a featured title selected from the current StoreDB catalogue.';
+  const featuredSummary = description.length > 220
+    ? `${description.slice(0, 220).replace(/\s+\S*$/, '')}...`
+    : description;
+
+  function categoryCount(categoryName) {
+    const count = availableProducts.filter((product) => product.category === categoryName).length;
+    const label = categoryName === 'Books' ? 'titles' : categoryName === 'Games' ? 'games' : 'picks';
+    return `${count} ${label}`;
+  }
 
   return (
     <main>
       <section className="hero page-shell">
         <div className="hero-copy">
-          <span className="hero-kicker"><i /> FEATURED RELEASE</span>
-          <h1>Lose yourself in the <em>unknown.</em></h1>
-          <p>Chart a course through a beautiful fractured galaxy in this award-winning story adventure.</p>
+          <span className="hero-kicker"><i /> FEATURED {featuredProduct.category?.toUpperCase()}</span>
+          <h1>Lose yourself in <em>{featuredProduct.title}</em></h1>
+          <p>{featuredSummary}</p>
           <div className="hero-actions">
-            <button className="primary-button" onClick={() => viewProduct(featuredProduct)}>Explore {featuredProduct.title} <Icon name="arrow" /></button>
+            <button
+              className="primary-button"
+              aria-label={`Explore ${featuredProduct.title}`}
+              onClick={() => viewProduct(featuredProduct)}
+            >
+              Explore now <Icon name="arrow" />
+            </button>
           </div>
         </div>
         <div className="hero-visual" aria-hidden="true">
           <img className="hero-art-image" src={heroArt} alt="" />
           <span className="hero-ship">PV-7</span>
-          <span className="hero-price"><small>Launch price</small><strong>$19.99</strong></span>
+          <span className="hero-price"><small>Current price</small><strong>${Number(featuredProduct.price || 0).toFixed(2)}</strong></span>
         </div>
       </section>
 
@@ -30,7 +47,7 @@ export default function HomePage({ navigate, viewProduct, addToCart, products })
         <div className="category-grid">
           {categories.map((category) => (
             <button className={`category-card category-${category.accent}`} key={category.name} onClick={() => navigate('listing', category.name)}>
-              <span className="category-copy"><small>{category.count}</small><strong>{category.name}</strong><em>{category.description}</em></span>
+              <span className="category-copy"><small>{categoryCount(category.name)}</small><strong>{category.name}</strong><em>{category.description}</em></span>
               <span className="category-go"><Icon name="arrow" size={18} /></span>
             </button>
           ))}
@@ -40,8 +57,8 @@ export default function HomePage({ navigate, viewProduct, addToCart, products })
       <section className="content-section page-shell">
         <SectionHeading eyebrow="Limited time" title="Deals worth downloading" description="Great stories, smaller prices. Updated every Friday." action="View all deals" onAction={() => navigate('listing')} />
         <div className="product-row">
-          {products.slice(1, 6).map((product) => (
-            <ProductCard product={product} onView={viewProduct} onAdd={addToCart} key={product.id} />
+          {availableProducts.slice(1, 6).map((product) => (
+            <ProductCard product={product} onView={viewProduct} onAdd={addToCart} canPurchase={canShop} key={product.id} />
           ))}
         </div>
       </section>

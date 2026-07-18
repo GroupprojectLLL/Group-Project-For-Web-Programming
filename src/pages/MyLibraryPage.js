@@ -1,60 +1,105 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { fetchLibrary } from '../api/orders';
 import AccountSideNav from '../components/AccountSideNav';
 import Icon from '../components/Icon';
+import ProductArt from '../components/ProductArt';
 
-function getLibraryType(product) {
-  if (product.category === 'Books') return 'E-book';
-  if (product.category === 'Movies & TV') return 'Movie';
-  return 'Game';
+const filterLabels = {
+  all: 'All Products',
+  Books: 'My Books',
+  Games: 'My Games',
+  'Movies & TV': 'My Movies & TV',
+};
+
+function normalizeLibraryCategory(value) {
+  const category = String(value || '').toLowerCase();
+  if (category.includes('book')) return 'Books';
+  if (category.includes('game')) return 'Games';
+  if (category.includes('movie')) return 'Movies & TV';
+  return 'Other';
 }
 
-function getPrimaryAction(product) {
-  const libraryType = getLibraryType(product);
-  if (libraryType === 'E-book') return 'Read Now';
-  if (libraryType === 'Movie') return 'Watch Now';
-  return 'Play Now';
-}
-
-function getSecondaryAction(product) {
-  return getLibraryType(product) === 'Game' ? 'Install' : 'Download';
-}
-
-function getDateValue(dateText) {
-  const time = new Date(dateText).getTime();
-  return Number.isFinite(time) ? time : 0;
-}
-
-export default function MyLibraryPage({ ownedProducts, viewProduct, onDownloadProduct, defaultSort = 'Newest' }) {
+export default function MyLibraryPage({ user, products, navigate, viewProduct, defaultSort = 'Newest' }) {
+  const [items, setItems] = useState([]);
   const [filter, setFilter] = useState('all');
-  const [search, setSearch] = useState('');
-  const [type, setType] = useState('All');
+  const [query, setQuery] = useState('');
   const [sort, setSort] = useState(defaultSort);
+  const [loading, setLoading] = useState(Boolean(user));
+  const [error, setError] = useState('');
 
-  const visibleProducts = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  useEffect(() => {
+    setSort(defaultSort);
+  }, [defaultSort]);
 
-    return ownedProducts
-      .filter((product) => {
-        const libraryType = getLibraryType(product);
-        const matchesFilter =
-          filter === 'all' ||
-          filter === libraryType ||
-          (filter === 'recent' && getDateValue(product.purchasedAt) > Date.now() - 1000 * 60 * 60 * 24 * 60) ||
-          (filter === 'downloaded' && product.downloaded);
-        const matchesType = type === 'All' || libraryType === type;
-        const matchesSearch = !query ||
-          String(product.productId || product.id).includes(query) ||
-          product.title.toLowerCase().includes(query) ||
-          product.orderId.toLowerCase().includes(query);
+  useEffect(() => {
+    let ignore = false;
+    if (!user) {
+      setItems([]);
+      setLoading(false);
+      return () => { ignore = true; };
+    }
 
-        return matchesFilter && matchesType && matchesSearch;
+    setLoading(true);
+    fetchLibrary()
+      .then((records) => {
+        if (!ignore) {
+          setItems(records);
+          setError('');
+        }
       })
-      .sort((a, b) => (
-        sort === 'Oldest'
-          ? getDateValue(a.purchasedAt) - getDateValue(b.purchasedAt)
-          : getDateValue(b.purchasedAt) - getDateValue(a.purchasedAt)
-      ));
-  }, [filter, ownedProducts, search, sort, type]);
+      .catch((loadError) => {
+        if (!ignore) setError(loadError.message);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+    return () => { ignore = true; };
+  }, [user]);
+
+  const mergedItems = useMemo(() => items.map((item) => {
+    const mergedItem = {
+      ...products.find((product) => String(product.id) === String(item.productId)),
+      ...item,
+      id: item.productId,
+    };
+    return {
+      ...mergedItem,
+      category: normalizeLibraryCategory(mergedItem.category),
+    };
+  }), [items, products]);
+
+  const categoryCounts = useMemo(() => mergedItems.reduce((counts, item) => ({
+    ...counts,
+    all: counts.all + 1,
+    [item.category]: Number(counts[item.category] || 0) + 1,
+  }), {
+    all: 0,
+    Books: 0,
+    Games: 0,
+    'Movies & TV': 0,
+  }), [mergedItems]);
+
+  const libraryItems = useMemo(() => {
+    const filtered = mergedItems.filter((item) => {
+      const queryMatches = !query.trim() || item.title?.toLowerCase().includes(query.trim().toLowerCase());
+      const filterMatches = filter === 'all' || item.category === filter;
+      return queryMatches && filterMatches;
+    });
+    return sort === 'Oldest' ? [...filtered].reverse() : filtered;
+  }, [filter, mergedItems, query, sort]);
+
+  if (!user) {
+    return (
+      <main className="account-workspace page-shell">
+        <div className="empty-state">
+          <Icon name="lock" size={30} />
+          <h3>Sign in to open My Library</h3>
+          <p>Your library is generated from products in your StoreDB order history.</p>
+          <button className="primary-button" onClick={() => navigate('account')}>Go to Account <Icon name="arrow" /></button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="account-workspace page-shell">
@@ -62,92 +107,57 @@ export default function MyLibraryPage({ ownedProducts, viewProduct, onDownloadPr
         <div>
           <span className="workspace-eyebrow">Digital collection</span>
           <h1>My Library</h1>
-          <p>Your purchased books, games, and movies in one place.</p>
+          <p>Products from your completed StoreDB orders.</p>
         </div>
         <div className="workspace-heading-stat">
-          <strong>{ownedProducts.length}</strong>
+          <strong>{mergedItems.length}</strong>
           <span>Owned products</span>
         </div>
       </section>
-
       <div className="account-workspace-layout">
-        <AccountSideNav filter={filter} onFilterChange={setFilter} />
-
-        <section className="account-workspace-main" aria-labelledby="library-title">
+        <AccountSideNav
+          variant="library"
+          filter={filter}
+          onFilterChange={setFilter}
+          counts={categoryCounts}
+        />
+        <section className="account-workspace-main" id="library-results" aria-live="polite">
           <div className="workspace-section-heading">
             <div>
               <span className="workspace-section-kicker">Collection</span>
-              <h2 id="library-title">Purchased products</h2>
+              <h2>{filterLabels[filter]}</h2>
             </div>
-            <span className="workspace-result-count">{visibleProducts.length} shown</span>
+            <span className="workspace-result-count">{libraryItems.length} shown</span>
           </div>
-          <form className="workspace-panel library-toolbar" onSubmit={(event) => event.preventDefault()}>
-            <label className="workspace-field workspace-field-wide">
-              <span>Search Library</span>
-              <input
-                aria-label="Search Library"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Title, product ID, order ID"
-              />
-            </label>
-            <label className="workspace-field">
-              <span>Type</span>
-              <select aria-label="Library Type" value={type} onChange={(event) => setType(event.target.value)}>
-                <option>All</option>
-                <option>E-book</option>
-                <option>Game</option>
-                <option>Movie</option>
-              </select>
-            </label>
-            <label className="workspace-field">
-              <span>Sort</span>
-              <select aria-label="Library Sort" value={sort} onChange={(event) => setSort(event.target.value)}>
-                <option>Newest</option>
-                <option>Oldest</option>
-              </select>
-            </label>
-          </form>
+          <div className="workspace-panel library-toolbar">
+            <label><span>Search Library</span><input aria-label="Search Library" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+            <label><span>Sort</span><select aria-label="Library Sort" value={sort} onChange={(event) => setSort(event.target.value)}><option>Newest</option><option>Oldest</option></select></label>
+          </div>
 
-          {visibleProducts.length ? (
-            <div className="library-grid">
-              {visibleProducts.map((product) => (
-                <article className="owned-card" key={`${product.orderId}-${product.productId || product.id}`}>
-                  <button className={`workspace-card-header workspace-card-header-${getLibraryType(product).toLowerCase()}`} type="button" onClick={() => viewProduct(product)} title={`View ${product.title}`}>
-                    <span className="workspace-card-type">{getLibraryType(product)}</span>
-                    <span className="workspace-card-id">Product #{product.productId || product.id}</span>
-                    <Icon name="arrow" size={17} />
-                  </button>
-                  <div className="workspace-card-copy">
-                    <div className="workspace-card-title-row">
-                      <strong className="workspace-card-title">{product.title}</strong>
-                      <span className={`library-state ${product.downloaded ? 'is-ready' : ''}`}>{product.downloaded ? 'Ready' : 'Online'}</span>
-                    </div>
-                    <span className="workspace-card-meta">{product.type}</span>
-                    <div className="library-card-details">
-                      <span><small>Purchased</small>{product.purchasedAt}</span>
-                      <span><small>Order</small>{product.orderId}</span>
-                      <span><small>License</small>{product.license}</span>
-                    </div>
-                  </div>
-                  <div className="workspace-card-actions">
-                    <button className="workspace-action-primary" type="button" onClick={() => viewProduct(product)}>
-                      <Icon name="play" size={15} />
-                      {getPrimaryAction(product)}
-                    </button>
-                    <button className="workspace-action-secondary" type="button" onClick={() => onDownloadProduct(product.productId || product.id)} disabled={product.downloaded}>
-                      {product.downloaded ? 'Ready' : getSecondaryAction(product)}
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="workspace-empty">
-              <strong>No library items found</strong>
-              <span>Complete checkout or adjust the current filter.</span>
+          {loading && <div className="workspace-panel workspace-message">Loading purchased products...</div>}
+          {error && <div className="workspace-panel workspace-error" role="alert">{error}</div>}
+          {!loading && !error && !libraryItems.length && (
+            <div className="workspace-panel workspace-message">
+              No purchased products match {filterLabels[filter].toLowerCase()}.
             </div>
           )}
+
+          <div className="library-grid">
+            {libraryItems.map((item) => (
+              <article className="owned-card" key={item.productId}>
+                <ProductArt product={item} />
+                <div className="workspace-card-copy">
+                  <strong>{item.title}</strong>
+                  <span>{item.category} / {item.type}</span>
+                  <span>Owned quantity: {item.ownedQuantity}</span>
+                  <span>Order: ORD-{item.orderId}</span>
+                </div>
+                <div className="workspace-card-actions">
+                  <button type="button" onClick={() => viewProduct(item)}>View Product</button>
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
       </div>
     </main>

@@ -4,6 +4,7 @@ import ProductCard from '../components/ProductCard';
 
 const PRODUCTS_PER_PAGE = 10;
 
+// Keeps large StoreDB result sets readable while preserving first and last page links.
 function buildPaginationItems(currentPage, totalPages) {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_, index) => index + 1);
@@ -22,9 +23,18 @@ function buildPaginationItems(currentPage, totalPages) {
     }, []);
 }
 
-export default function ListingPage({ category, subCategory, search, viewProduct, addToCart, products }) {
+export default function ListingPage({ category, subCategory, search, viewProduct, addToCart, products, canShop = true }) {
   const [sort, setSort] = useState('Popular');
   const [currentPage, setCurrentPage] = useState(1);
+  const [viewMode, setViewMode] = useState('list');
+  const hasRatings = products.some((product) => (
+    product.rating !== null
+    && product.rating !== undefined
+    && product.reviews !== null
+    && product.reviews !== undefined
+    && Number.isFinite(Number(product.rating))
+    && Number.isFinite(Number(product.reviews))
+  ));
 
   const visibleProducts = useMemo(() => {
     let result = products.filter((product) =>
@@ -33,17 +43,19 @@ export default function ListingPage({ category, subCategory, search, viewProduct
       (!search || product.title.toLowerCase().includes(search.toLowerCase()))
     );
     if (sort === 'Price: Low') result = [...result].sort((a, b) => a.price - b.price);
-    if (sort === 'Rating') result = [...result].sort((a, b) => b.rating - a.rating);
+    if (sort === 'Rating') result = [...result].sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0));
     return result;
   }, [category, products, search, sort, subCategory]);
 
   const totalPages = Math.max(1, Math.ceil(visibleProducts.length / PRODUCTS_PER_PAGE));
   const pageStartIndex = (currentPage - 1) * PRODUCTS_PER_PAGE;
+  // Only the current page slice is rendered, while filtering still uses the full result set.
   const paginatedProducts = visibleProducts.slice(pageStartIndex, pageStartIndex + PRODUCTS_PER_PAGE);
   const paginationItems = buildPaginationItems(currentPage, totalPages);
   const firstShownItem = visibleProducts.length ? pageStartIndex + 1 : 0;
   const lastShownItem = Math.min(pageStartIndex + PRODUCTS_PER_PAGE, visibleProducts.length);
 
+  // A new browsing context should always start from the first page.
   useEffect(() => {
     setCurrentPage(1);
   }, [category, search, sort, subCategory]);
@@ -51,6 +63,10 @@ export default function ListingPage({ category, subCategory, search, viewProduct
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
+
+  useEffect(() => {
+    if (!hasRatings && sort === 'Rating') setSort('Popular');
+  }, [hasRatings, sort]);
 
   const goToPage = (page) => {
     const nextPage = Math.min(Math.max(page, 1), totalPages);
@@ -70,15 +86,23 @@ export default function ListingPage({ category, subCategory, search, viewProduct
       <div className="listing-title">
         <div><span className="eyebrow">The digital shelf</span><h1>{listingTitle}</h1><p>{listingDescription}</p></div>
         <div className="listing-controls">
-          <label className="sort-select">Sort by:<select value={sort} onChange={(event) => setSort(event.target.value)}><option>Popular</option><option>Rating</option><option>Price: Low</option></select><Icon name="chevron" size={14} /></label>
-          <button className="view-mode"><Icon name="grid" size={18} /></button>
+          <label className="sort-select">Sort by:<select value={sort} onChange={(event) => setSort(event.target.value)}><option>Popular</option>{hasRatings && <option>Rating</option>}<option>Price: Low</option></select><Icon name="chevron" size={14} /></label>
+          <button
+            className="view-mode"
+            type="button"
+            aria-label={viewMode === 'list' ? 'Show product grid' : 'Show product list'}
+            title={viewMode === 'list' ? 'Show product grid' : 'Show product list'}
+            onClick={() => setViewMode((mode) => mode === 'list' ? 'grid' : 'list')}
+          >
+            <Icon name={viewMode === 'list' ? 'grid' : 'menu'} size={18} />
+          </button>
         </div>
       </div>
       <div className="listing-layout">
         <section>
           {visibleProducts.length ? (
-            <div className="listing-grid">
-              {paginatedProducts.map((product) => <ProductCard product={product} onView={viewProduct} onAdd={addToCart} layout="row" key={product.id} />)}
+            <div className={`listing-grid listing-grid-${viewMode}`}>
+              {paginatedProducts.map((product) => <ProductCard product={product} onView={viewProduct} onAdd={addToCart} canPurchase={canShop} layout={viewMode === 'list' ? 'row' : 'grid'} key={product.id} />)}
             </div>
           ) : (
             <div className="empty-state"><Icon name="search" size={30} /><h3>No titles found</h3><p>Try clearing a filter or searching for something else.</p></div>

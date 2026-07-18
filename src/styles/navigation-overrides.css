@@ -137,9 +137,6 @@
 .rating { gap: 7px; }
 .rating strong { color: #df6818; font-weight: 700; }
 .rating span { color: #a09287; }
-.account-visual-rating .rating { gap: 9px; color: #8c7464; font-size: 12px; white-space: nowrap; }
-.account-visual-rating .rating strong { color: #ef6f1f; font-weight: 900; }
-.account-visual-rating .rating span { color: #8c7464; }
 .price { display: block; }
 
 @media (max-width: 900px) {

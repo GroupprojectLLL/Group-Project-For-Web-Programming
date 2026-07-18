@@ -4,8 +4,29 @@ import ProductArt from '../components/ProductArt';
 import { getCartItemQuantity, getCartLineTotal, getOrderTotals } from '../utils/orderTotals';
 import { createOrder } from '../api/orders';
 
+function validateNewCard({ cardNumber, cardName, cardExpiry, cardCvv }) {
+  const number = cardNumber.replace(/[\s-]/g, '');
+  if (!/^\d{12,19}$/.test(number)) return 'Enter a valid card number.';
+  if (cardName.trim().length < 2) return 'Enter the cardholder name.';
+
+  const expiryMatch = cardExpiry.trim().match(/^(0[1-9]|1[0-2])\s*\/\s*(\d{2}|\d{4})$/);
+  if (!expiryMatch) return 'Enter a valid expiry date in MM / YY format.';
+
+  const expiryMonth = Number(expiryMatch[1]);
+  const rawYear = Number(expiryMatch[2]);
+  const expiryYear = rawYear < 100 ? 2000 + rawYear : rawYear;
+  const now = new Date();
+  if (expiryYear < now.getFullYear() || (expiryYear === now.getFullYear() && expiryMonth < now.getMonth() + 1)) {
+    return 'The card expiry date has passed.';
+  }
+
+  if (!/^\d{3,4}$/.test(cardCvv.trim())) return 'Enter a valid CVV.';
+  return '';
+}
+
 export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
-  const [paymentMethod, setPaymentMethod] = useState('Visa **** 1234');
+  const savedCardLabel = user?.paymentMethod ? `Card **** ${user.paymentMethod.last4}` : null;
+  const [paymentMethod, setPaymentMethod] = useState(savedCardLabel || 'New card');
   const [cardNumber, setCardNumber] = useState('');
   const [cardName, setCardName] = useState('');
   const [cardExpiry, setCardExpiry] = useState('');
@@ -23,25 +44,36 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
       return;
     }
 
+    if (user.role !== 'Customer') {
+      setError('Checkout is available to customer accounts only.');
+      return;
+    }
+
     if (!cart.length) {
       setError('Your cart is empty.');
       return;
     }
 
-    if (paymentMethod === 'New card' && (!cardNumber.trim() || !cardName.trim() || !cardExpiry.trim() || !cardCvv.trim())) {
-      setError('Please complete the new card details.');
-      return;
+    if (paymentMethod === 'New card') {
+      const validationError = validateNewCard({ cardNumber, cardName, cardExpiry, cardCvv });
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
     }
 
     setError('');
     setSavingOrder(true);
+    const paymentLabel = paymentMethod === 'New card'
+      ? `Card **** ${cardNumber.replace(/\D/g, '').slice(-4)}`
+      : paymentMethod;
 
     const order = {
       id: `ORD-${Date.now().toString().slice(-6)}`,
       paymentId: `PAY-${Date.now().toString().slice(-6)}`,
       user,
       items: cart,
-      paymentMethod,
+      paymentMethod: paymentLabel,
       subtotal,
       discount,
       tax,
@@ -50,12 +82,18 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
     };
 
     try {
+      // Payment confirmation waits for StoreDB to return the saved order id.
       const savedOrder = await createOrder(order);
 
       onPlaceOrder({
         ...order,
         id: `ORD-${savedOrder.orderId}`,
         databaseOrderId: savedOrder.orderId,
+        status: savedOrder.status,
+        refundStatus: savedOrder.refundStatus,
+        total: Number(savedOrder.total ?? order.total),
+        paymentMethod: savedOrder.paymentMethod || order.paymentMethod,
+        createdAt: savedOrder.createdAt || order.createdAt,
         savedItems: savedOrder.items,
       });
       navigate('order-detail');
@@ -64,6 +102,20 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
     } finally {
       setSavingOrder(false);
     }
+  }
+
+  if (user && user.role !== 'Customer') {
+    return (
+      <main className="checkout-page page-shell">
+        <div className="empty-state">
+          <Icon name="lock" size={30} />
+          <h3>Customer account required</h3>
+          <button className="primary-button" onClick={() => navigate(user.role === 'Employee' ? 'employee-dashboard' : 'admin-dashboard')}>
+            Return to dashboard
+          </button>
+        </div>
+      </main>
+    );
   }
 
   if (!cart.length) {
@@ -120,7 +172,7 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
             <span className="eyebrow">Payment method</span>
             <h2>Choose payment method</h2>
             <div className="payment-options">
-              {['Visa **** 1234', 'PayPal account', 'New card'].map((method) => (
+              {[...(savedCardLabel ? [savedCardLabel] : []), 'PayPal account', 'New card'].map((method) => (
                 <label key={method}>
                   <input
                     type="radio"
@@ -138,10 +190,10 @@ export default function CheckoutPage({ cart, user, navigate, onPlaceOrder }) {
 
             {paymentMethod === 'New card' && (
               <div className="new-card-fields">
-                <label><span>Card number</span><input value={cardNumber} onChange={(event) => setCardNumber(event.target.value)} placeholder="1234 5678 9012 3456" /></label>
-                <label><span>Cardholder name</span><input value={cardName} onChange={(event) => setCardName(event.target.value)} placeholder="Morgan Lee" /></label>
-                <label><span>Expiry</span><input value={cardExpiry} onChange={(event) => setCardExpiry(event.target.value)} placeholder="MM / YY" /></label>
-                <label><span>CVV</span><input value={cardCvv} onChange={(event) => setCardCvv(event.target.value)} placeholder="123" /></label>
+                <label><span>Card number</span><input value={cardNumber} onChange={(event) => setCardNumber(event.target.value)} placeholder="1234 5678 9012 3456" inputMode="numeric" autoComplete="cc-number" maxLength="23" /></label>
+                <label><span>Cardholder name</span><input value={cardName} onChange={(event) => setCardName(event.target.value)} placeholder="Morgan Lee" autoComplete="cc-name" maxLength="100" /></label>
+                <label><span>Expiry</span><input value={cardExpiry} onChange={(event) => setCardExpiry(event.target.value)} placeholder="MM / YY" inputMode="numeric" autoComplete="cc-exp" maxLength="9" /></label>
+                <label><span>CVV</span><input value={cardCvv} onChange={(event) => setCardCvv(event.target.value)} placeholder="123" inputMode="numeric" autoComplete="cc-csc" maxLength="4" /></label>
               </div>
             )}
 

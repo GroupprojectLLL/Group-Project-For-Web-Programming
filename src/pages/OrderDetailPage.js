@@ -1,11 +1,8 @@
-import { useState } from 'react';
 import Icon from '../components/Icon';
 import ProductArt from '../components/ProductArt';
 import { getCartItemQuantity, getCartLineTotal } from '../utils/orderTotals';
 
-export default function OrderDetailPage({ order, navigate, onRequestRefund }) {
-  const [refundSubmitted, setRefundSubmitted] = useState(false);
-
+export default function OrderDetailPage({ order, navigate }) {
   if (!order) {
     return (
       <main className="order-detail-page page-shell">
@@ -21,15 +18,11 @@ export default function OrderDetailPage({ order, navigate, onRequestRefund }) {
     );
   }
 
-  function submitRefund(event) {
-    event.preventDefault();
-    onRequestRefund?.(order.id);
-    setRefundSubmitted(true);
-  }
+  const paymentDate = order.createdAt && !Number.isNaN(new Date(order.createdAt).getTime())
+    ? new Date(order.createdAt).toLocaleString()
+    : order.createdAt || 'Legacy order';
 
-  const refundOpen = order.status === 'Refund Requested';
-  const refunded = order.status === 'Refunded';
-
+  // The page shows the StoreDB order id returned after checkout.
   return (
     <main className="order-detail-page page-shell">
       <div className="breadcrumbs">
@@ -56,9 +49,10 @@ export default function OrderDetailPage({ order, navigate, onRequestRefund }) {
             {order.databaseOrderId && <div><span>StoreDB OrderID</span><strong>{order.databaseOrderId}</strong></div>}
             <div><span>Payment ID</span><strong>{order.paymentId}</strong></div>
             <div><span>Payment Method</span><strong>{order.paymentMethod}</strong></div>
-            <div><span>Payment Date</span><strong>{order.createdAt}</strong></div>
+            <div><span>Payment Date</span><strong>{paymentDate}</strong></div>
             <div><span>Total Paid</span><strong>${order.total.toFixed(2)}</strong></div>
-            <div><span>Status</span><strong className="paid-status">{order.status || 'Completed'}</strong></div>
+            <div><span>Status</span><strong className="paid-status">{order.status || 'Paid'}</strong></div>
+            <div><span>Refund Status</span><strong>{order.refundStatus || 'Not requested'}</strong></div>
           </div>
         </article>
 
@@ -90,22 +84,15 @@ export default function OrderDetailPage({ order, navigate, onRequestRefund }) {
       <section className="refund-panel">
         <div className="refund-heading">
           <div>
-            <span className="eyebrow">Refund request</span>
-            <h2>Request a refund</h2>
-            <p>Refund eligibility: available within 7 days if the product is unused.</p>
+            <span className="eyebrow">Refund support</span>
+            <h2>Need help with this order?</h2>
+            <p>Online refund requests are not available in this prototype.</p>
           </div>
-          <span className="refund-status-pill">{refunded ? 'Refunded' : refundOpen || refundSubmitted ? 'Submitted' : 'Eligible'}</span>
+          <span className="refund-status-pill">Unavailable</span>
         </div>
-        <form className="refund-form" onSubmit={submitRefund}>
-          <label><span>Refund reason</span><textarea placeholder="Please describe your refund reason..." rows="5" /></label>
-          <div className="refund-actions">
-            <button className="primary-button" type="submit" disabled={refundOpen || refunded || refundSubmitted}>
-              {refundOpen || refundSubmitted ? 'Refund Request Submitted' : 'Submit Refund Request'} <Icon name="arrow" />
-            </button>
-            <button type="button" onClick={() => navigate('home')}>Cancel</button>
-          </div>
-          {refundSubmitted && <div className="refund-message"><Icon name="check" size={16} />Your refund request has been submitted for admin review.</div>}
-        </form>
+        <div className="refund-actions">
+          <button type="button" onClick={() => navigate('order-history')}>Back to Order History</button>
+        </div>
       </section>
     </main>
   );

@@ -169,6 +169,7 @@ function getStockInfo(stockRows, productId) {
   return {
     price,
     quantity,
+    // Order lines use the stock item key, so product data keeps that id.
     stockItemId: toNumber(preferredStock?.ItemId ?? preferredStock?.itemId, null),
   };
 }
@@ -189,14 +190,15 @@ function normalizeProduct(product, stockRows, genreRows, subGenreRowsByGenreId, 
     creator: product.Author || product.creator || '',
     price,
     oldPrice: Number((price * 1.25).toFixed(2)),
-    rating: Number((4.4 + (id % 5) * 0.1).toFixed(1)),
-    reviews: 120 + ((id * 137) % 4800),
+    rating: null,
+    reviews: null,
     badge: stock.quantity > 0 ? `${stock.quantity} in stock` : 'Database item',
     art: ART_KEYS[index % ART_KEYS.length],
     description: product.Description || product.description || 'No description is available for this product.',
     published: product.Published,
     stockQuantity: stock.quantity,
     stockItemId: stock.stockItemId,
+    dataSource: 'storedb',
     raw: product,
   };
 }

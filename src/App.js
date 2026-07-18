@@ -2,14 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import { products as demoProducts } from './data';
 import { fetchProducts } from './api/products';
-import {
-  deleteWishlistProduct,
-  fetchAccountWorkspace,
-  saveAccountOrder,
-  saveDownloadedProduct,
-  saveRefundRequest,
-  saveWishlistProduct,
-} from './api/accountWorkspace';
+import { fetchCurrentUser } from './api/auth';
+import { saveWishlistItem } from './api/wishlist';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import DataSourceNotice from './components/DataSourceNotice';
@@ -27,76 +21,40 @@ import WishlistPage from './pages/WishlistPage';
 import OrderHistoryPage from './pages/OrderHistoryPage';
 import MyLibraryPage from './pages/MyLibraryPage';
 import SettingsPage, { DEFAULT_SETTINGS } from './pages/SettingsPage';
+import EmployeeDashboardPage from './pages/EmployeeDashboardPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminProductManagementPage from './pages/AdminProductManagementPage';
+import AdminUserManagementPage from './pages/AdminUserManagementPage';
 import { placeholderPages } from './config/placeholderPages';
 import { buildNavigationMenus } from './utils/navigation';
-import { getCartItemQuantity, getOrderTotals } from './utils/orderTotals';
 
-const WISHLIST_STORAGE_KEY = 'zhsg-wishlist-product-ids';
-const ORDER_HISTORY_STORAGE_KEY = 'zhsg-order-history';
-const DOWNLOADED_STORAGE_KEY = 'zhsg-downloaded-product-ids';
 const SETTINGS_STORAGE_KEY = 'zhsg-settings';
-const DEFAULT_WISHLIST_PRODUCT_IDS = [2, 3, 4, 8, 9, 11];
 const PROTECTED_ACCOUNT_PAGES = new Set([
+  'checkout',
   'payment-methods',
   'wishlist',
   'order-history',
   'my-library',
+  'order-detail',
   'settings',
 ]);
+const CUSTOMER_ONLY_PAGES = new Set([
+  'cart',
+  'checkout',
+  'payment-methods',
+  'wishlist',
+  'order-history',
+  'my-library',
+  'order-detail',
+]);
 
-function readStoredValue(key, fallback) {
+function readSettings() {
   try {
-    const stored = window.localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : fallback;
+    const stored = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    return stored ? { ...DEFAULT_SETTINGS, ...JSON.parse(stored) } : DEFAULT_SETTINGS;
   } catch {
-    return fallback;
+    return DEFAULT_SETTINGS;
   }
-}
-
-function writeStoredValue(key, value) {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Local storage is a convenience for this frontend prototype.
-  }
-}
-
-function productIdOf(value) {
-  return String(value?.productId ?? value?.id ?? value);
-}
-
-function buildOrder(id, date, status, items, paymentMethod = 'Visa **** 1234') {
-  const orderItems = items.map((item) => ({
-    ...item.product,
-    productId: item.product.id,
-    quantity: item.quantity,
-  }));
-  const totals = getOrderTotals(orderItems);
-
-  return {
-    id,
-    paymentId: `PAY-${id.replace('ORD-', '')}`,
-    paymentMethod,
-    createdAt: date,
-    status,
-    items: orderItems,
-    ...totals,
-  };
-}
-
-function buildDemoOrderHistory(products) {
-  return [
-    buildOrder('ORD-1001', '2026-05-20', 'Completed', [
-      { product: products[0], quantity: 1 },
-      { product: products[1], quantity: 1 },
-    ]),
-    buildOrder('ORD-1002', '2026-05-18', 'Refund Requested', [
-      { product: products[10], quantity: 1 },
-    ], 'PayPal account'),
-    buildOrder('ORD-1003', '2026-05-12', 'Refunded', [
-      { product: products[2], quantity: 1 },
-    ]),
-  ].filter((order) => order.items.every(Boolean));
 }
 
 export default function App() {
@@ -107,144 +65,22 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState(demoProducts[0]);
   const [cartItems, setCartItems] = useState([]);
   const [user, setUser] = useState(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
   const [pendingAccountPage, setPendingAccountPage] = useState(null);
   const [latestOrder, setLatestOrder] = useState(null);
-  const [wishlistProductIds, setWishlistProductIds] = useState(() => (
-    readStoredValue(WISHLIST_STORAGE_KEY, DEFAULT_WISHLIST_PRODUCT_IDS).map(productIdOf)
-  ));
-  const [orderHistory, setOrderHistory] = useState(() => (
-    readStoredValue(ORDER_HISTORY_STORAGE_KEY, buildDemoOrderHistory(demoProducts))
-  ));
-  const [downloadedProductIds, setDownloadedProductIds] = useState(() => (
-    readStoredValue(DOWNLOADED_STORAGE_KEY, []).map(productIdOf)
-  ));
-  const [settings, setSettings] = useState(() => ({
-    ...DEFAULT_SETTINGS,
-    ...readStoredValue(SETTINGS_STORAGE_KEY, DEFAULT_SETTINGS),
-  }));
+  const [settings, setSettings] = useState(readSettings);
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState('');
   const [toastTone, setToastTone] = useState('success');
   const [dataStatus, setDataStatus] = useState('loading');
   const [dataError, setDataError] = useState('');
-  const customerId = user?.customerId || user?.id || 'guest';
   const navigationMenus = useMemo(() => buildNavigationMenus(products), [products]);
-  const productsById = useMemo(() => new Map(products.map((product) => [productIdOf(product), product])), [products]);
-  const wishlistProducts = useMemo(() => (
-    wishlistProductIds.map((productId) => productsById.get(productId)).filter(Boolean)
-  ), [productsById, wishlistProductIds]);
-  const orderHistoryWithProducts = useMemo(() => (
-    orderHistory.map((order) => {
-      const items = (order.items || []).map((item) => {
-        const productId = productIdOf(item);
-        const product = productsById.get(productId);
-        return {
-          ...(product || item),
-          productId,
-          quantity: getCartItemQuantity(item),
-        };
-      });
-      const totals = getOrderTotals(items);
-
-      return {
-        ...order,
-        status: order.status || 'Completed',
-        items,
-        subtotal: Number.isFinite(Number(order.subtotal)) ? Number(order.subtotal) : totals.subtotal,
-        discount: Number.isFinite(Number(order.discount)) ? Number(order.discount) : totals.discount,
-        tax: Number.isFinite(Number(order.tax)) ? Number(order.tax) : totals.tax,
-        total: Number.isFinite(Number(order.total)) ? Number(order.total) : totals.total,
-      };
-    })
-  ), [orderHistory, productsById]);
-  const ownedProducts = useMemo(() => {
-    const ownedByProductId = new Map();
-
-    orderHistoryWithProducts
-      .filter((order) => order.status !== 'Refunded')
-      .forEach((order) => {
-        order.items.forEach((item) => {
-          const productId = productIdOf(item);
-          const current = ownedByProductId.get(productId);
-
-          if (!current || new Date(order.createdAt) > new Date(current.purchasedAt)) {
-            ownedByProductId.set(productId, {
-              ...item,
-              productId,
-              orderId: order.id,
-              purchasedAt: order.createdAt,
-              license: order.status === 'Refund Requested' ? 'Refund review' : 'Owned',
-              downloaded: downloadedProductIds.includes(productId),
-            });
-          }
-        });
-      });
-
-    return [...ownedByProductId.values()];
-  }, [downloadedProductIds, orderHistoryWithProducts]);
-
-  useEffect(() => {
-    writeStoredValue(WISHLIST_STORAGE_KEY, wishlistProductIds);
-  }, [wishlistProductIds]);
-
-  useEffect(() => {
-    writeStoredValue(ORDER_HISTORY_STORAGE_KEY, orderHistory);
-  }, [orderHistory]);
-
-  useEffect(() => {
-    writeStoredValue(DOWNLOADED_STORAGE_KEY, downloadedProductIds);
-  }, [downloadedProductIds]);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('reduce-motion', settings.reduceMotion);
-
-    return () => document.documentElement.classList.remove('reduce-motion');
-  }, [settings.reduceMotion]);
-
-  useEffect(() => {
-    let ignore = false;
-
-    fetchAccountWorkspace(customerId)
-      .then((workspace) => {
-        if (ignore) return;
-
-        if (Array.isArray(workspace.wishlistProductIds)) {
-          setWishlistProductIds(workspace.wishlistProductIds.map(productIdOf));
-        }
-
-        if (Array.isArray(workspace.orders)) {
-          setOrderHistory(workspace.orders);
-        }
-
-        if (Array.isArray(workspace.downloadedProductIds)) {
-          setDownloadedProductIds(workspace.downloadedProductIds.map(productIdOf));
-        }
-      })
-      .catch(() => {
-        // Keep the local fallback when the account workspace API is offline.
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [customerId]);
 
   useEffect(() => {
     const onHashChange = () => setPage(window.location.hash.replace('#', '') || 'home');
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
-
-  useEffect(() => {
-    if (!user && page !== 'account' && PROTECTED_ACCOUNT_PAGES.has(page)) {
-      setPendingAccountPage(page);
-      setToastTone('error');
-      setToast('Please sign in first.');
-      window.setTimeout(() => setToast(''), 2600);
-      window.location.hash = 'account';
-      setPage('account');
-    }
-  }, [page, user]);
 
   useEffect(() => {
     let ignore = false;
@@ -270,6 +106,49 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    let ignore = false;
+    fetchCurrentUser()
+      .then((account) => {
+        if (!ignore) setUser(account);
+      })
+      .catch(() => {
+        if (!ignore) setUser(null);
+      })
+      .finally(() => {
+        if (!ignore) setSessionLoaded(true);
+      });
+    return () => { ignore = true; };
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('reduce-motion', settings.reduceMotion);
+    return () => document.documentElement.classList.remove('reduce-motion');
+  }, [settings.reduceMotion]);
+
+  useEffect(() => {
+    if (!sessionLoaded) return;
+
+    if (!user && page !== 'account' && PROTECTED_ACCOUNT_PAGES.has(page)) {
+      setPendingAccountPage(page);
+      setToastTone('error');
+      setToast('Please sign in first.');
+      window.setTimeout(() => setToast(''), 2600);
+      window.location.hash = 'account';
+      setPage('account');
+      return;
+    }
+
+    if (user && user.role !== 'Customer' && CUSTOMER_ONLY_PAGES.has(page)) {
+      const destination = user.role === 'Employee' ? 'employee-dashboard' : 'admin-dashboard';
+      setToastTone('error');
+      setToast('This page is available to customer accounts.');
+      window.setTimeout(() => setToast(''), 2600);
+      window.location.hash = destination;
+      setPage(destination);
+    }
+  }, [page, sessionLoaded, user]);
+
   const showToast = (message, tone = 'success') => {
     setToastTone(tone);
     setToast(message);
@@ -283,6 +162,9 @@ export default function App() {
       setPendingAccountPage(nextPage);
       showToast('Please sign in first.', 'error');
       destinationPage = 'account';
+    } else if (user && user.role !== 'Customer' && CUSTOMER_ONLY_PAGES.has(nextPage)) {
+      showToast('This page is available to customer accounts.', 'error');
+      destinationPage = user.role === 'Employee' ? 'employee-dashboard' : 'admin-dashboard';
     } else if (nextPage !== 'account') {
       setPendingAccountPage(null);
     }
@@ -309,11 +191,12 @@ export default function App() {
     }
 
     if (pendingAccountPage) {
-      const destinationPage = pendingAccountPage;
+      const customerDestination = nextUser.role === 'Customer'
+        ? pendingAccountPage
+        : nextUser.role === 'Employee' ? 'employee-dashboard' : 'admin-dashboard';
       setPendingAccountPage(null);
-      window.location.hash = destinationPage;
-      setPage(destinationPage);
-      window.scrollTo({ top: 0, behavior: settings.reduceMotion ? 'auto' : 'smooth' });
+      window.location.hash = customerDestination;
+      setPage(customerDestination);
     }
   };
 
@@ -322,13 +205,12 @@ export default function App() {
     navigate('detail');
   };
 
-  const syncAccountRequest = (request) => {
-    request.catch(() => {
-      // The UI keeps working from local state if the API is offline.
-    });
-  };
-
   const addToCart = (product) => {
+    if (user && user.role !== 'Customer') {
+      showToast('Employee and Admin accounts have read-only store access.', 'error');
+      return;
+    }
+
     setCartItems((items) => {
       const existingItem = items.find((item) => String(item.id) === String(product.id));
 
@@ -345,46 +227,25 @@ export default function App() {
     showToast(`${product.title} added to cart`);
   };
 
-  const addToWishlist = (product) => {
-    const productId = productIdOf(product);
-
-    setWishlistProductIds((productIds) => (
-      productIds.includes(productId) ? productIds : [productId, ...productIds]
-    ));
-    syncAccountRequest(saveWishlistProduct(customerId, productId));
-    showToast(`${product.title} saved to wishlist`);
-  };
-
-  const addWishlistProductById = (productId) => {
-    const product = productsById.get(productIdOf(productId));
-
-    if (!product) {
-      showToast(`Product ID ${productId} was not found`);
-      return false;
-    }
-
-    addToWishlist(product);
-    return true;
-  };
-
-  const removeFromWishlist = (productId) => {
-    const product = productsById.get(productIdOf(productId));
-    setWishlistProductIds((productIds) => productIds.filter((itemId) => itemId !== productIdOf(productId)));
-    syncAccountRequest(deleteWishlistProduct(customerId, productIdOf(productId)));
-    showToast(`${product?.title || 'Product'} removed from wishlist`);
-  };
-
-  const moveWishlistItemToCart = (productId) => {
-    const product = productsById.get(productIdOf(productId));
-
-    if (!product) {
-      showToast('Product could not be found');
+  const addToWishlist = async (product) => {
+    if (!user) {
+      setToast('Sign in to save wishlist items');
+      window.setTimeout(() => setToast(''), 2200);
+      navigate('account');
       return;
     }
 
-    addToCart(product);
-    setWishlistProductIds((productIds) => productIds.filter((itemId) => itemId !== productIdOf(productId)));
-    syncAccountRequest(deleteWishlistProduct(customerId, productIdOf(productId)));
+    if (user.role !== 'Customer') {
+      showToast('Wishlist is available to customer accounts.', 'error');
+      return;
+    }
+
+    try {
+      const result = await saveWishlistItem(user.id, product.id);
+      showToast(result.created ? `${product.title} added to wishlist` : `${product.title} is already in your wishlist`);
+    } catch (error) {
+      showToast(`Wishlist could not be updated: ${error.message}`, 'error');
+    }
   };
 
   const updateCartQuantity = (productId, nextQuantity) => {
@@ -410,74 +271,47 @@ export default function App() {
   };
 
   const placeOrder = (order) => {
-    const completedOrder = {
+    setLatestOrder({
       ...order,
-      status: 'Completed',
       items: order.items.map((item) => ({ ...item })),
-    };
-
-    setLatestOrder(completedOrder);
-    setOrderHistory((orders) => [
-      completedOrder,
-      ...orders.filter((savedOrder) => savedOrder.id !== completedOrder.id),
-    ]);
-    syncAccountRequest(saveAccountOrder(customerId, completedOrder));
+    });
     setCartItems([]);
     showToast('Payment successful');
   };
 
-  const openOrderDetail = (order) => {
-    setLatestOrder(order);
+  const openStoredOrder = (order) => {
+    const items = order.items.map((item) => ({
+      ...products.find((product) => String(product.id) === String(item.productId || item.id)),
+      ...item,
+      id: item.productId || item.id,
+    }));
+    setLatestOrder({ ...order, items });
     navigate('order-detail');
-  };
-
-  const requestRefundForOrder = (orderId) => {
-    const refundRequestedAt = new Date().toLocaleString();
-
-    setOrderHistory((orders) => (
-      orders.map((order) => (
-        order.id === orderId
-          ? { ...order, status: 'Refund Requested', refundRequestedAt }
-          : order
-      ))
-    ));
-    setLatestOrder((order) => (
-      order?.id === orderId
-        ? { ...order, status: 'Refund Requested', refundRequestedAt }
-        : order
-    ));
-    syncAccountRequest(saveRefundRequest(customerId, orderId));
-    showToast('Refund request submitted');
-  };
-
-  const markProductDownloaded = (productId) => {
-    const product = productsById.get(productIdOf(productId));
-
-    setDownloadedProductIds((productIds) => (
-      productIds.includes(productIdOf(productId)) ? productIds : [...productIds, productIdOf(productId)]
-    ));
-    syncAccountRequest(saveDownloadedProduct(customerId, productIdOf(productId)));
-    showToast(`${product?.title || 'Product'} is ready offline`);
   };
 
   const saveSettings = (nextSettings, message = 'Settings saved') => {
     const savedSettings = { ...DEFAULT_SETTINGS, ...nextSettings };
     setSettings(savedSettings);
-    writeStoredValue(SETTINGS_STORAGE_KEY, savedSettings);
+    try {
+      window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(savedSettings));
+    } catch {
+      // Settings remain active for this session when local storage is unavailable.
+    }
     showToast(message);
   };
 
   const placeholder = placeholderPages[page];
   const cartCount = cartItems.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+  const canShop = !user || user.role === 'Customer';
 
   return (
     <div className="app">
       <Header navigate={navigate} navigationMenus={navigationMenus} search={search} setSearch={setSearch} cartCount={cartCount} user={user} />
       <DataSourceNotice status={dataStatus} error={dataError} />
-      {page === 'home' && <HomePage navigate={navigate} viewProduct={viewProduct} addToCart={addToCart} products={products} />}
-      {page === 'listing' && <ListingPage category={category} subCategory={subCategory} search={search} viewProduct={viewProduct} addToCart={addToCart} navigate={navigate} products={products} />}
-      {page === 'detail' && <ProductDetailPage product={selectedProduct} addToCart={addToCart} addToWishlist={addToWishlist} isWishlisted={wishlistProductIds.includes(productIdOf(selectedProduct))} buyNow={buyNow} navigate={navigate} />}
-      {page === 'account' && <AccountPage products={products} user={user} onAuth={handleAuth} checkoutPending={cartCount > 0} navigate={navigate} />}
+      {page === 'home' && <HomePage navigate={navigate} viewProduct={viewProduct} addToCart={addToCart} products={products} canShop={canShop} />}
+      {page === 'listing' && <ListingPage category={category} subCategory={subCategory} search={search} viewProduct={viewProduct} addToCart={addToCart} navigate={navigate} products={products} canShop={canShop} />}
+      {page === 'detail' && <ProductDetailPage product={selectedProduct} addToCart={addToCart} addToWishlist={addToWishlist} buyNow={buyNow} canShop={canShop} />}
+      {page === 'account' && <AccountPage user={user} onAuth={handleAuth} checkoutPending={cartCount > 0} navigate={navigate} />}
       {page === 'cart' && (
         <CartPage
           products={products}
@@ -491,17 +325,20 @@ export default function App() {
         />
       )}
       {page === 'checkout' && <CheckoutPage cart={cartItems} user={user} navigate={navigate} onPlaceOrder={placeOrder} />}
-      {page === 'payment-methods' && <PaymentMethodsPage user={user} navigate={navigate} />}
-      {page === 'order-detail' && <OrderDetailPage order={latestOrder} navigate={navigate} onRequestRefund={requestRefundForOrder} />}
-      {page === 'wishlist' && <WishlistPage wishlistProducts={wishlistProducts} products={products} navigate={navigate} viewProduct={viewProduct} onAddProductById={addWishlistProductById} onMoveToCart={moveWishlistItemToCart} onRemove={removeFromWishlist} />}
-      {page === 'order-history' && <OrderHistoryPage orders={orderHistoryWithProducts} navigate={navigate} onViewOrder={openOrderDetail} onRequestRefund={requestRefundForOrder} />}
-      {page === 'my-library' && <MyLibraryPage ownedProducts={ownedProducts} navigate={navigate} viewProduct={viewProduct} onDownloadProduct={markProductDownloaded} defaultSort={settings.librarySort} />}
-      {page === 'settings' && <SettingsPage settings={settings} onSave={saveSettings} />}
+      {page === 'payment-methods' && <PaymentMethodsPage user={user} navigate={navigate} onUserUpdate={setUser} />}
+      {page === 'order-detail' && <OrderDetailPage order={latestOrder} navigate={navigate} />}
+      {page === 'wishlist' && <WishlistPage user={user} products={products} addToCart={addToCart} viewProduct={viewProduct} navigate={navigate} />}
+      {page === 'order-history' && <OrderHistoryPage user={user} products={products} navigate={navigate} onOpenOrder={openStoredOrder} />}
+      {page === 'my-library' && <MyLibraryPage user={user} products={products} navigate={navigate} viewProduct={viewProduct} defaultSort={settings.librarySort} />}
+      {page === 'settings' && user && <SettingsPage settings={settings} onSave={saveSettings} />}
+      {page === 'employee-dashboard' && <EmployeeDashboardPage user={user} navigate={navigate} />}
+      {page === 'admin-dashboard' && <AdminDashboardPage user={user} navigate={navigate} />}
+      {page === 'admin-product-management' && <AdminProductManagementPage user={user} navigate={navigate} />}
+      {page === 'admin-user-management' && <AdminUserManagementPage user={user} navigate={navigate} />}
       {placeholder && <PlaceholderPage title={placeholder.title} description={placeholder.description} actions={placeholder.actions} navigate={navigate} />}
       <Footer navigate={navigate} />
       <div className={`toast toast-${toastTone} ${toast ? 'show' : ''}`} role={toastTone === 'error' && toast ? 'alert' : undefined}>
-        <Icon name={toastTone === 'error' ? 'lock' : 'check'} size={16} />
-        {toast}
+        <Icon name={toastTone === 'error' ? 'lock' : 'check'} size={16} />{toast}
       </div>
     </div>
   );

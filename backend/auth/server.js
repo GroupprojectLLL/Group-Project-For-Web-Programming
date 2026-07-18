@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import sql from 'mssql';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import cors from 'cors';
-import crypto from "crypto";
+import crypto from 'crypto';
 
 const {
   PORT = 3001,
@@ -18,226 +18,53 @@ const {
   MSSQL_ENCRYPT = 'false',
   NOCO_URL = 'http://nocodb:8080',
   NOCO_API_TOKEN = '',
-  CORS_ORIGINS = ''
+  CORS_ORIGINS = 'http://localhost:3000',
 } = process.env;
 
 const app = express();
+const origins = CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean);
 
 app.use(cookieParser());
-app.use(express.json());
-
-const defaultOrigins = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:3002',
-  'http://127.0.0.1:3002',
-];
-const origins = CORS_ORIGINS
-  ? CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
-  : defaultOrigins;
+app.use(express.json({ limit: '1mb' }));
 app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin || origins.includes(origin)) return cb(null, true);
-    return cb(new Error('CORS blocked'), false);
+  origin: (origin, callback) => {
+    if (!origin || origins.includes(origin)) return callback(null, true);
+    return callback(new Error('CORS blocked'), false);
   },
-  credentials: true
+  credentials: true,
 }));
 
-// ---------- ACCOUNT WORKSPACE ROUTES ----------
-const DEFAULT_ACCOUNT_WORKSPACE = {
-  wishlistProductIds: [2, 3, 4, 8, 9, 11],
-  downloadedProductIds: [],
-  orders: [
-    {
-      id: 'ORD-1001',
-      paymentId: 'PAY-1001',
-      paymentMethod: 'Visa **** 1234',
-      createdAt: '2026-05-20',
-      status: 'Completed',
-      items: [
-        { productId: 1, quantity: 1 },
-        { productId: 2, quantity: 1 },
-      ],
-    },
-    {
-      id: 'ORD-1002',
-      paymentId: 'PAY-1002',
-      paymentMethod: 'PayPal account',
-      createdAt: '2026-05-18',
-      status: 'Refund Requested',
-      items: [
-        { productId: 11, quantity: 1 },
-      ],
-    },
-    {
-      id: 'ORD-1003',
-      paymentId: 'PAY-1003',
-      paymentMethod: 'Visa **** 1234',
-      createdAt: '2026-05-12',
-      status: 'Refunded',
-      items: [
-        { productId: 3, quantity: 1 },
-      ],
-    },
-  ],
-};
-
-const accountWorkspaces = new Map();
-
-function cloneJson(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-function normalizeCustomerId(customerId) {
-  return String(customerId || 'guest');
-}
-
-function getCustomerId(req) {
-  return normalizeCustomerId(req.body?.customerId || req.query?.customerId || req.user?.sub || 'guest');
-}
-
-function getAccountWorkspace(customerId) {
-  const workspaceKey = normalizeCustomerId(customerId);
-
-  if (!accountWorkspaces.has(workspaceKey)) {
-    accountWorkspaces.set(workspaceKey, cloneJson(DEFAULT_ACCOUNT_WORKSPACE));
-  }
-
-  return accountWorkspaces.get(workspaceKey);
-}
-
-function normalizeOrderForWorkspace(order) {
-  const id = String(order?.id || `ORD-${Date.now().toString().slice(-6)}`);
-  const items = Array.isArray(order?.items)
-    ? order.items
-      .map((item) => ({
-        productId: toPositiveInt(item.productId ?? item.id),
-        stockItemId: toPositiveInt(item.stockItemId),
-        quantity: Math.max(1, toPositiveInt(item.quantity) || 1),
-      }))
-      .filter((item) => item.productId)
-    : [];
-
-  return {
-    id,
-    paymentId: String(order?.paymentId || `PAY-${Date.now().toString().slice(-6)}`),
-    databaseOrderId: toPositiveInt(order?.databaseOrderId),
-    paymentMethod: String(order?.paymentMethod || 'Unknown'),
-    createdAt: String(order?.createdAt || new Date().toLocaleString()),
-    status: String(order?.status || 'Completed'),
-    subtotal: Number(order?.subtotal || 0),
-    discount: Number(order?.discount || 0),
-    tax: Number(order?.tax || 0),
-    total: Number(order?.total || 0),
-    items,
-  };
-}
-
-app.get('/account/workspace', (req, res) => {
-  res.json(cloneJson(getAccountWorkspace(getCustomerId(req))));
-});
-
-app.post('/account/wishlist', (req, res) => {
-  const productId = toPositiveInt(req.body?.productId);
-
-  if (!productId) {
-    return res.status(400).json({ error: 'productId is required' });
-  }
-
-  const workspace = getAccountWorkspace(getCustomerId(req));
-  const productIds = workspace.wishlistProductIds.map(String);
-
-  if (!productIds.includes(String(productId))) {
-    workspace.wishlistProductIds = [productId, ...workspace.wishlistProductIds];
-  }
-
-  res.status(201).json({ wishlistProductIds: workspace.wishlistProductIds });
-});
-
-app.delete('/account/wishlist/:productId', (req, res) => {
-  const productId = toPositiveInt(req.params.productId);
-  const workspace = getAccountWorkspace(getCustomerId(req));
-  workspace.wishlistProductIds = workspace.wishlistProductIds.filter((itemId) => String(itemId) !== String(productId));
-
-  res.json({ wishlistProductIds: workspace.wishlistProductIds });
-});
-
-app.post('/account/orders', (req, res) => {
-  const order = normalizeOrderForWorkspace(req.body?.order);
-
-  if (!order.items.length) {
-    return res.status(400).json({ error: 'at least one order item is required' });
-  }
-
-  const workspace = getAccountWorkspace(getCustomerId(req));
-  workspace.orders = [
-    order,
-    ...workspace.orders.filter((savedOrder) => savedOrder.id !== order.id),
-  ];
-
-  res.status(201).json({ order, orders: workspace.orders });
-});
-
-app.patch('/account/orders/:orderId/refund', (req, res) => {
-  const workspace = getAccountWorkspace(getCustomerId(req));
-  const order = workspace.orders.find((savedOrder) => savedOrder.id === req.params.orderId);
-
-  if (!order) {
-    return res.status(404).json({ error: 'order not found' });
-  }
-
-  order.status = 'Refund Requested';
-  order.refundRequestedAt = new Date().toLocaleString();
-
-  res.json({ order, orders: workspace.orders });
-});
-
-app.post('/account/downloads', (req, res) => {
-  const productId = toPositiveInt(req.body?.productId);
-
-  if (!productId) {
-    return res.status(400).json({ error: 'productId is required' });
-  }
-
-  const workspace = getAccountWorkspace(getCustomerId(req));
-  const productIds = workspace.downloadedProductIds.map(String);
-
-  if (!productIds.includes(String(productId))) {
-    workspace.downloadedProductIds = [...workspace.downloadedProductIds, productId];
-  }
-
-  res.status(201).json({ downloadedProductIds: workspace.downloadedProductIds });
-});
-
-// ---------- PROXY TO NOCODB (protected) ----------
-app.use('/api', authRequired, (req, res, next) => {
-  next();
-}, createProxyMiddleware({
-  target: process.env.NOCO_URL,
-  changeOrigin: true,
-  pathRewrite: (path, req) => {
-    let out = path.replace(/^\/inft3050\//, '/api/v1/db/data/v1/inft3050/');
-    console.log("Out path=" + out);
-    return out;
-  },
-  headers: { 'xc-token': process.env.NOCO_API_TOKEN },
-}));
-
-// ---------- MSSQL POOL ----------
-const poolPromise = sql.connect({
+const poolPromise = new sql.ConnectionPool({
   server: MSSQL_SERVER,
   database: MSSQL_DB,
   user: MSSQL_USER,
   password: MSSQL_PASSWORD,
   options: {
     encrypt: String(MSSQL_ENCRYPT).toLowerCase() === 'true',
-    trustServerCertificate: true
-  }
-});
+    trustServerCertificate: true,
+  },
+}).connect();
 
-// ---------- JWT helpers ----------
-function signToken(payload) {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: Number(JWT_EXPIRES) });
+// The supplied StoreDB schema is used as-is. This service only reads and writes records.
+const applicationPoolPromise = poolPromise;
+
+const ACCOUNT_ROLES = new Set(['Customer', 'Employee', 'Admin']);
+
+function normalizeRole(value, fallback = 'Customer') {
+  const requested = String(value || '').trim().toLowerCase();
+  const role = [...ACCOUNT_ROLES].find((candidate) => candidate.toLowerCase() === requested);
+  return role || fallback;
+}
+
+function signToken(user) {
+  return jwt.sign({
+    sub: user.id,
+    email: user.email,
+    username: user.username,
+    isAdmin: Boolean(user.isAdmin),
+    role: normalizeRole(user.role, user.isAdmin ? 'Admin' : 'Customer'),
+    customerId: user.customerId || null,
+  }, JWT_SECRET, { expiresIn: Number(JWT_EXPIRES) });
 }
 
 function toPositiveInt(value) {
@@ -245,242 +72,1224 @@ function toPositiveInt(value) {
   return Number.isInteger(number) && number > 0 ? number : null;
 }
 
-async function resolveStockItemId(transaction, item) {
-  const stockItemId = toPositiveInt(item.stockItemId ?? item.stocktakeItemId ?? item.itemId);
-  if (stockItemId) return stockItemId;
+function toNonNegativeNumber(value, fallback = null) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
 
-  const productId = toPositiveInt(item.productId ?? item.id);
-  if (!productId) return null;
+function cleanText(value, maxLength = 255) {
+  const text = String(value ?? '').trim();
+  return text ? text.slice(0, maxLength) : null;
+}
 
-  const result = await new sql.Request(transaction)
-    .input('productId', sql.Int, productId)
+function createHttpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function hashPassword(salt, password) {
+  return crypto.createHash('sha256').update(`${salt}${password}`, 'utf8').digest('hex');
+}
+
+function passwordsMatch(expectedHash, actualHash) {
+  const expected = Buffer.from(String(expectedHash || '').toLowerCase());
+  const actual = Buffer.from(String(actualHash || '').toLowerCase());
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+
+function setSessionCookie(res, user) {
+  res.cookie('token', signToken(user), {
+    httpOnly: true,
+    secure: NODE_ENV === 'production',
+    sameSite: NODE_ENV === 'production' ? 'none' : 'lax',
+    maxAge: Number(JWT_EXPIRES) * 1000,
+  });
+}
+
+function clearSessionCookie(res) {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: NODE_ENV === 'production',
+    sameSite: NODE_ENV === 'production' ? 'none' : 'lax',
+  });
+}
+
+function decodeSession(req) {
+  const token = req.cookies?.token;
+  if (!token) return null;
+
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+async function requireAuth(req, res, next) {
+  const session = decodeSession(req);
+  if (!session) return res.status(401).json({ error: 'Authentication required' });
+
+  try {
+    const pool = await applicationPoolPromise;
+    const account = serializeUser(await findUserById(pool, session.sub));
+    if (!account) {
+      clearSessionCookie(res);
+      return res.status(401).json({ error: 'Account no longer exists' });
+    }
+
+    req.user = {
+      ...session,
+      sub: account.id,
+      username: account.username,
+      email: account.email,
+      role: account.role,
+      isAdmin: account.isAdmin,
+      customerId: account.customerId,
+    };
+    return next();
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Account access could not be verified' });
+  }
+}
+
+function requireAdmin(req, res, next) {
+  return requireAuth(req, res, () => {
+    if (!req.user.isAdmin && req.user.role !== 'Admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    return next();
+  });
+}
+
+function requireStaff(req, res, next) {
+  return requireAuth(req, res, () => {
+    const role = normalizeRole(req.user.role, req.user.isAdmin ? 'Admin' : 'Customer');
+    if (role !== 'Employee' && role !== 'Admin') {
+      return res.status(403).json({ error: 'Employee or Admin access required' });
+    }
+    return next();
+  });
+}
+
+function requireCustomer(req, res, next) {
+  return requireAuth(req, res, () => {
+    const role = normalizeRole(req.user.role, req.user.isAdmin ? 'Admin' : 'Customer');
+    if (role !== 'Customer') {
+      return res.status(403).json({ error: 'Customer access required' });
+    }
+    return next();
+  });
+}
+
+async function findUserById(context, userId) {
+  const result = await new sql.Request(context)
+    .input('userId', sql.Int, toPositiveInt(userId))
     .query(`
-      SELECT TOP 1 ItemId
-      FROM dbo.Stocktake
-      WHERE ProductId = @productId
-      ORDER BY
-        CASE WHEN Quantity > 0 THEN 0 ELSE 1 END,
-        Price ASC,
-        ItemId ASC
+      SELECT TOP 1
+        u.UserID AS id,
+        u.UserName AS username,
+        u.Email AS email,
+        u.Name AS name,
+        u.isAdmin AS isAdmin,
+        CASE
+          WHEN u.isAdmin = 1 THEN N'Admin'
+          WHEN customer.customerID IS NOT NULL THEN N'Customer'
+          ELSE N'Employee'
+        END AS accessRole,
+        customer.customerID AS customerId,
+        customer.PhoneNumber AS phoneNumber,
+        customer.StreetAddress AS streetAddress,
+        customer.PostCode AS postCode,
+        customer.Suburb AS suburb,
+        customer.State AS state,
+        customer.CardNumber AS cardNumber,
+        customer.CardOwner AS cardOwner,
+        customer.Expiry AS expiry
+      FROM dbo.[User] u
+      OUTER APPLY (
+        SELECT TOP 1 c.*
+        FROM dbo.[TO] c
+        WHERE u.Email IS NOT NULL AND LOWER(c.Email) = LOWER(u.Email)
+        ORDER BY c.customerID
+      ) customer
+      WHERE u.UserID = @userId
     `);
 
-  return toPositiveInt(result.recordset?.[0]?.ItemId);
+  return result.recordset?.[0] || null;
+}
+
+function serializeUser(row) {
+  if (!row) return null;
+  const cardDigits = String(row.cardNumber || '').replace(/\D/g, '');
+
+  return {
+    id: Number(row.id),
+    username: row.username,
+    email: row.email,
+    name: row.name || row.username,
+    isAdmin: Boolean(row.isAdmin),
+    role: normalizeRole(row.accessRole, row.isAdmin ? 'Admin' : 'Customer'),
+    customerId: row.customerId ? Number(row.customerId) : null,
+    phoneNumber: row.phoneNumber || '',
+    address: {
+      streetAddress: row.streetAddress || '',
+      postCode: row.postCode || '',
+      suburb: row.suburb || '',
+      state: row.state || '',
+    },
+    paymentMethod: cardDigits
+      ? { last4: cardDigits.slice(-4), cardOwner: row.cardOwner || '', expiry: row.expiry || '' }
+      : null,
+  };
+}
+
+async function ensureCustomerForUser(transaction, user, address = {}) {
+  if (!user.email) throw createHttpError(400, 'A customer email is required before checkout');
+
+  const existing = await new sql.Request(transaction)
+    .input('email', sql.NVarChar(255), user.email)
+    .query(`
+      SELECT TOP 1 customerID
+      FROM dbo.[TO] WITH (UPDLOCK, HOLDLOCK)
+      WHERE LOWER(Email) = LOWER(@email)
+      ORDER BY customerID
+    `);
+
+  const customerId = toPositiveInt(existing.recordset?.[0]?.customerID);
+  const streetAddress = cleanText(address.streetAddress);
+  const postCode = toPositiveInt(address.postCode);
+  const suburb = cleanText(address.suburb, 50);
+  const state = cleanText(address.state, 50);
+
+  if (customerId) {
+    if (streetAddress || postCode || suburb || state) {
+      await new sql.Request(transaction)
+        .input('customerId', sql.Int, customerId)
+        .input('streetAddress', sql.NVarChar(255), streetAddress)
+        .input('postCode', sql.Int, postCode)
+        .input('suburb', sql.NVarChar(50), suburb)
+        .input('state', sql.NVarChar(50), state)
+        .query(`
+          UPDATE dbo.[TO]
+          SET StreetAddress = COALESCE(@streetAddress, StreetAddress),
+              PostCode = COALESCE(@postCode, PostCode),
+              Suburb = COALESCE(@suburb, Suburb),
+              State = COALESCE(@state, State)
+          WHERE customerID = @customerId
+        `);
+    }
+    return customerId;
+  }
+
+  const inserted = await new sql.Request(transaction)
+    .input('email', sql.NVarChar(255), user.email)
+    .input('streetAddress', sql.NVarChar(255), streetAddress)
+    .input('postCode', sql.Int, postCode)
+    .input('suburb', sql.NVarChar(50), suburb)
+    .input('state', sql.NVarChar(50), state)
+    .query(`
+      INSERT INTO dbo.[TO] (Email, StreetAddress, PostCode, Suburb, State)
+      OUTPUT INSERTED.customerID
+      VALUES (@email, @streetAddress, @postCode, @suburb, @state)
+    `);
+
+  return toPositiveInt(inserted.recordset?.[0]?.customerID);
+}
+
+async function createUser(transaction, input, allowRoleSelection = false) {
+  const username = cleanText(input.username, 50);
+  const email = cleanText(input.email, 255)?.toLowerCase();
+  const name = cleanText(input.name, 255);
+  const password = String(input.password || '');
+  const requestedRole = input.role || (input.isAdmin ? 'Admin' : 'Customer');
+  const role = allowRoleSelection ? normalizeRole(requestedRole, null) : 'Customer';
+  const isAdmin = role === 'Admin';
+
+  if (!username || username.length < 3) throw createHttpError(400, 'Username must contain at least 3 characters');
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw createHttpError(400, 'A valid email address is required');
+  if (!name) throw createHttpError(400, 'Name is required');
+  if (password.length < 8) throw createHttpError(400, 'Password must contain at least 8 characters');
+  if (!role || !ACCOUNT_ROLES.has(role)) throw createHttpError(400, 'Role must be Customer, Employee, or Admin');
+
+  const duplicate = await new sql.Request(transaction)
+    .input('username', sql.NVarChar(50), username)
+    .input('email', sql.NVarChar(255), email)
+    .query(`
+      SELECT TOP 1 UserID
+      FROM dbo.[User]
+      WHERE LOWER(UserName) = LOWER(@username) OR LOWER(Email) = LOWER(@email)
+    `);
+
+  if (duplicate.recordset?.length) throw createHttpError(409, 'Username or email is already registered');
+
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = hashPassword(salt, password);
+  const inserted = await new sql.Request(transaction)
+    .input('username', sql.NVarChar(50), username)
+    .input('email', sql.NVarChar(255), email)
+    .input('name', sql.NVarChar(255), name)
+    .input('isAdmin', sql.Bit, isAdmin)
+    .input('salt', sql.VarChar(32), salt)
+    .input('hash', sql.VarChar(64), hash)
+    .query(`
+      INSERT INTO dbo.[User] (UserName, Email, Name, isAdmin, Salt, HashPW)
+      OUTPUT INSERTED.UserID
+      VALUES (@username, @email, @name, @isAdmin, @salt, @hash)
+    `);
+
+  const userId = toPositiveInt(inserted.recordset?.[0]?.UserID);
+
+  if (role === 'Customer') {
+    await new sql.Request(transaction)
+      .input('email', sql.NVarChar(255), email)
+      .query('INSERT INTO dbo.[TO] (Email) VALUES (@email)');
+  }
+
+  return findUserById(transaction, userId);
 }
 
 function extractTableFromPath(pathname) {
-  // v2: /api/v2/tables/<tableIdOrSlug>/...
-  let m = pathname.match(/^\/inft3050\/([^/]+)/i);
-  if (m) return decodeURIComponent(m[1]);
-
-  return null;
+  const match = pathname.match(/^\/inft3050\/([^/?]+)/i);
+  return match ? decodeURIComponent(match[1]).toLowerCase() : null;
 }
 
-function authRequired(req, res, next) {
-  const token = req.cookies?.token;
-  const { pathname } = new URL(req.url, 'http://x'); // safe parse
-  const table = extractTableFromPath(pathname);
-  console.log("Received request for table: " + table + " on URL " + pathname);
+const SENSITIVE_TABLES = new Set(['user', 'users', 'to', 'orders', 'productsinorders', 'patrons']);
 
-  // Block specific tables before proxying to NocoDB
-  const BLOCKED = new Set([
-    'user', 'users', 'dbo.user', 'dbo.users',
-    // add your table slug or UUID here if using v2 ids, e.g.:
-    // 'tbl_123abc', '3f2e4f1b-...' 
-  ]);
+function authorizeProxy(req, res, next) {
+  const table = extractTableFromPath(req.url);
+  if (!table) return res.status(404).json({ error: 'Unknown API table' });
 
-  let needAuth = true;
-  let needAdmin = true;
-
-  if (req.url == '/login') {
-    needAuth = false;
-    needAdmin = false;
-  } else if (req.url == '/logout') {
-    needAuth = true;
-    needAdmin = false;
-  } else if (req.url == '/me') {
-    needAuth = true;
-    needAdmin = false;
-  }
-  else if (table) {
-    if (BLOCKED.has(table.toLowerCase())) {
-      if (req.method === "GET") {
-        needAuth = true;
-        needAdmin = false;
-      }
-      else {
-        needAuth = true;
-        needAdmin = true;
-      }
-    } else {
-      if (req.method === "GET") {
-        needAuth = false;
-        needAdmin = false;
-      }
-      else {
-        needAuth = true;
-        needAdmin = false;
-      }
-    }
-  } else {
-    console.log("Rejected - unknown URL " + pathname);
-    return res.status(401).json({ error: 'Forbidden: unknown URL' });
-  }
-
-  if (needAuth) {
-    if (!token) {
-      console.log("Rejected - authentication required but no token found on URL " + pathname);
-      return res.status(401).json({ error: 'Forbidden: authentication required' });
-    }
-    try {
-      req.user = jwt.verify(token, JWT_SECRET);
-
-      if (needAdmin) {
-        if (req.user.isAdmin === true) {
-          console.log("Accepted - admin credentials required on URL " + pathname);
-          next();
-        }
-        else {
-          console.log("Rejected - credentials provided but not admin on URL " + pathname);
-          return res.status(403).json({ error: 'Forbidden: admin access required' });
-        }
-      }
-      else {
-        console.log("Accepted - non admin authenticated request on URL " + pathname);
-        next();
-      }
-    } catch {
-      console.log("Rejected - invalid token provided on URL " + pathname);
-      return res.status(401).json({ error: 'Invalid or expired token' });
-    }
-  }
-  else {
-    console.log("Accepted - public request on URL " + pathname)
-    next();
-  }
-
+  if (req.method === 'GET' && !SENSITIVE_TABLES.has(table)) return next();
+  if (req.method === 'GET') return requireStaff(req, res, next);
+  return requireAdmin(req, res, next);
 }
 
-// ---------- ORDER ROUTES ----------
-app.post('/orders', async (req, res) => {
-  const { customerId, items = [], address = {} } = req.body ?? {};
+app.use('/api', authorizeProxy, createProxyMiddleware({
+  target: NOCO_URL,
+  changeOrigin: true,
+  pathRewrite: (path) => path.replace(/^\/inft3050\//, '/api/v1/db/data/v1/inft3050/'),
+  headers: { 'xc-token': NOCO_API_TOKEN },
+}));
 
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'at least one order item is required' });
-  }
-
-  const pool = await poolPromise;
+app.post('/register', async (req, res) => {
+  const pool = await applicationPoolPromise;
   const transaction = new sql.Transaction(pool);
 
   try {
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    const row = await createUser(transaction, req.body || {}, false);
+    await transaction.commit();
+    const user = serializeUser(row);
+    setSessionCookie(res, user);
+    return res.status(201).json({ user });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    return res.status(error.status || 500).json({ error: error.message || 'Account could not be created' });
+  }
+});
+
+app.post('/login', async (req, res) => {
+  const identifier = cleanText(req.body?.identifier ?? req.body?.username, 255);
+  const password = String(req.body?.password || '');
+  if (!identifier || !password) return res.status(400).json({ error: 'Username or email and password are required' });
+
+  try {
+    const pool = await applicationPoolPromise;
+    const result = await pool.request()
+      .input('identifier', sql.NVarChar(255), identifier)
+      .query(`
+        SELECT TOP 1 UserID, UserName, Email, Name, isAdmin, Salt, HashPW
+        FROM dbo.[User]
+        WHERE LOWER(UserName) = LOWER(@identifier) OR LOWER(Email) = LOWER(@identifier)
+      `);
+
+    const record = result.recordset?.[0];
+    if (!record || !passwordsMatch(record.HashPW, hashPassword(record.Salt, password))) {
+      return res.status(401).json({ error: 'Invalid username, email, or password' });
+    }
+
+    const user = serializeUser(await findUserById(pool, record.UserID));
+    setSessionCookie(res, user);
+    return res.json({ user });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Sign in failed' });
+  }
+});
+
+app.post('/logout', (req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+app.get('/session', async (req, res) => {
+  const session = decodeSession(req);
+  if (!session) return res.json({ user: null });
+
+  try {
+    const pool = await applicationPoolPromise;
+    return res.json({ user: serializeUser(await findUserById(pool, session.sub)) });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Session could not be loaded' });
+  }
+});
+
+app.get('/me', requireAuth, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    const user = serializeUser(await findUserById(pool, req.user.sub));
+    if (!user) {
+      clearSessionCookie(res);
+      return res.status(401).json({ error: 'Account no longer exists' });
+    }
+    return res.json({ user });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Account could not be loaded' });
+  }
+});
+
+app.put('/me', requireAuth, async (req, res) => {
+  const name = cleanText(req.body?.name, 255);
+  const email = cleanText(req.body?.email, 255)?.toLowerCase();
+  const phoneNumber = cleanText(req.body?.phoneNumber, 50);
+  const address = req.body?.address || {};
+  const streetAddress = cleanText(address.streetAddress, 255);
+  const suburb = cleanText(address.suburb, 50);
+  const state = cleanText(address.state, 50);
+  const postCodeInput = String(address.postCode ?? '').trim();
+  const postCode = postCodeInput ? toPositiveInt(postCodeInput) : null;
+  if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'A name and valid email are required' });
+  }
+  if (postCodeInput && !postCode) {
+    return res.status(400).json({ error: 'Postcode must be a positive whole number' });
+  }
+
+  const pool = await applicationPoolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    const current = await findUserById(transaction, req.user.sub);
+    if (!current) throw createHttpError(404, 'Account not found');
+
+    const duplicate = await new sql.Request(transaction)
+      .input('userId', sql.Int, req.user.sub)
+      .input('email', sql.NVarChar(255), email)
+      .query('SELECT UserID FROM dbo.[User] WHERE UserID <> @userId AND LOWER(Email) = LOWER(@email)');
+    if (duplicate.recordset?.length) throw createHttpError(409, 'Email is already registered');
+
+    await new sql.Request(transaction)
+      .input('userId', sql.Int, req.user.sub)
+      .input('name', sql.NVarChar(255), name)
+      .input('email', sql.NVarChar(255), email)
+      .query('UPDATE dbo.[User] SET Name = @name, Email = @email WHERE UserID = @userId');
+
+    if (current.email) {
+      await new sql.Request(transaction)
+        .input('oldEmail', sql.NVarChar(255), current.email)
+        .input('email', sql.NVarChar(255), email)
+        .query('UPDATE dbo.[TO] SET Email = @email WHERE LOWER(Email) = LOWER(@oldEmail)');
+    }
+
+    if (current.customerId) {
+      await new sql.Request(transaction)
+        .input('customerId', sql.Int, current.customerId)
+        .input('phoneNumber', sql.NVarChar(50), phoneNumber)
+        .input('streetAddress', sql.NVarChar(255), streetAddress)
+        .input('postCode', sql.Int, postCode)
+        .input('suburb', sql.NVarChar(50), suburb)
+        .input('state', sql.NVarChar(50), state)
+        .query(`
+          UPDATE dbo.[TO]
+          SET PhoneNumber = @phoneNumber,
+              StreetAddress = @streetAddress,
+              PostCode = @postCode,
+              Suburb = @suburb,
+              State = @state
+          WHERE customerID = @customerId
+        `);
+    }
+
+    const row = await findUserById(transaction, req.user.sub);
+    await transaction.commit();
+    const user = serializeUser(row);
+    setSessionCookie(res, user);
+    return res.json({ user });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    return res.status(error.status || 500).json({ error: error.message || 'Profile could not be updated' });
+  }
+});
+
+app.put('/me/payment-method', requireCustomer, async (req, res) => {
+  const cardDigits = String(req.body?.cardNumber || '').replace(/\D/g, '');
+  const cardOwner = cleanText(req.body?.cardOwner, 50);
+  const expiry = cleanText(req.body?.expiry, 5);
+  if (cardDigits.length < 12 || cardDigits.length > 19 || !cardOwner || !/^\d{2}\/\d{2}$/.test(expiry || '')) {
+    return res.status(400).json({ error: 'Valid card details are required' });
+  }
+
+  const pool = await applicationPoolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
     await transaction.begin();
+    const user = serializeUser(await findUserById(transaction, req.user.sub));
+    if (!user) throw createHttpError(404, 'Account not found');
+    const customerId = await ensureCustomerForUser(transaction, user);
+    const last4 = cardDigits.slice(-4);
+
+    await new sql.Request(transaction)
+      .input('customerId', sql.Int, customerId)
+      .input('cardNumber', sql.NVarChar(50), last4)
+      .input('cardOwner', sql.NVarChar(50), cardOwner)
+      .input('expiry', sql.VarChar(5), expiry)
+      .query(`
+        UPDATE dbo.[TO]
+        SET CardNumber = @cardNumber, CardOwner = @cardOwner, Expiry = @expiry, CVV = NULL
+        WHERE customerID = @customerId
+      `);
+
+    await transaction.commit();
+    return res.json({ paymentMethod: { last4, cardOwner, expiry } });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    return res.status(error.status || 500).json({ error: error.message || 'Payment method could not be saved' });
+  }
+});
+
+async function resolveStockRecord(transaction, item, quantity) {
+  const stockItemId = toPositiveInt(item.stockItemId ?? item.stocktakeItemId ?? item.itemId);
+  const productId = toPositiveInt(item.productId ?? item.id);
+  const request = new sql.Request(transaction).input('quantity', sql.Int, quantity);
+
+  if (stockItemId) {
+    request.input('stockItemId', sql.Int, stockItemId);
+    const result = await request.query(`
+      SELECT TOP 1 s.ItemId, s.ProductId, s.Quantity, s.Price, p.Name
+      FROM dbo.Stocktake s WITH (UPDLOCK, ROWLOCK)
+      JOIN dbo.Product p ON p.ID = s.ProductId
+      WHERE s.ItemId = @stockItemId AND s.Quantity >= @quantity
+    `);
+    return result.recordset?.[0] || null;
+  }
+
+  if (!productId) return null;
+  request.input('productId', sql.Int, productId);
+  const result = await request.query(`
+    SELECT TOP 1 s.ItemId, s.ProductId, s.Quantity, s.Price, p.Name
+    FROM dbo.Stocktake s WITH (UPDLOCK, ROWLOCK)
+    JOIN dbo.Product p ON p.ID = s.ProductId
+    WHERE s.ProductId = @productId AND s.Quantity >= @quantity
+    ORDER BY s.Price, s.ItemId
+  `);
+  return result.recordset?.[0] || null;
+}
+
+function categoryName(value) {
+  const name = String(value || '').toLowerCase();
+  if (name.includes('book')) return 'Books';
+  if (name.includes('movie')) return 'Movies & TV';
+  if (name.includes('game')) return 'Games';
+  return 'Digital product';
+}
+
+async function loadOrders(pool, customerId, requestedOrderId = null) {
+  if (!customerId) return [];
+  const request = pool.request().input('customerId', sql.Int, customerId);
+  let orderFilter = '';
+  if (requestedOrderId) {
+    request.input('orderId', sql.Int, requestedOrderId);
+    orderFilter = 'AND o.OrderID = @orderId';
+  }
+
+  const result = await request.query(`
+    SELECT
+      o.OrderID AS orderId,
+      o.StreetAddress AS streetAddress,
+      o.PostCode AS postCode,
+      o.Suburb AS suburb,
+      o.State AS state,
+      lines.Quantity AS quantity,
+      stock.ItemId AS stockItemId,
+      stock.Price AS price,
+      product.ID AS productId,
+      product.Name AS title,
+      product.Author AS creator,
+      product.Description AS description,
+      COALESCE(bookGenre.Name, movieGenre.Name, gameGenre.Name) AS subGenreName,
+      genre.Name AS genreName
+    FROM dbo.Orders o
+    LEFT JOIN dbo.ProductsInOrders lines ON lines.OrderId = o.OrderID
+    LEFT JOIN dbo.Stocktake stock ON stock.ItemId = lines.produktId
+    LEFT JOIN dbo.Product product ON product.ID = stock.ProductId
+    LEFT JOIN dbo.Genre genre ON genre.genreID = product.Genre
+    LEFT JOIN dbo.Book_genre bookGenre
+      ON product.Genre = 1 AND bookGenre.subGenreID = product.subGenre
+    LEFT JOIN dbo.Movie_genre movieGenre
+      ON product.Genre = 2 AND movieGenre.subGenreID = product.subGenre
+    LEFT JOIN dbo.Game_genre gameGenre
+      ON product.Genre = 3 AND gameGenre.subGenreID = product.subGenre
+    WHERE o.customer = @customerId ${orderFilter}
+    ORDER BY o.OrderID DESC, product.Name
+  `);
+
+  const orders = new Map();
+  for (const row of result.recordset) {
+    if (!orders.has(row.orderId)) {
+      orders.set(row.orderId, {
+        id: `ORD-${row.orderId}`,
+        orderId: Number(row.orderId),
+        databaseOrderId: Number(row.orderId),
+        paymentId: `PAY-${row.orderId}`,
+        paymentMethod: 'Not stored by StoreDB',
+        createdAt: null,
+        status: 'Recorded',
+        refundStatus: 'Not available',
+        address: {
+          streetAddress: row.streetAddress || '',
+          postCode: row.postCode || '',
+          suburb: row.suburb || '',
+          state: row.state || '',
+        },
+        total: 0,
+        itemCount: 0,
+        items: [],
+      });
+    }
+
+    if (row.productId) {
+      const order = orders.get(row.orderId);
+      const quantity = Math.max(1, Number(row.quantity || 1));
+      const price = Number(row.price || 0);
+      order.items.push({
+        id: Number(row.productId),
+        productId: Number(row.productId),
+        stockItemId: Number(row.stockItemId),
+        title: row.title,
+        creator: row.creator || '',
+        description: row.description || '',
+        category: categoryName(row.genreName),
+        type: row.subGenreName || 'General',
+        quantity,
+        price,
+      });
+      order.itemCount += quantity;
+      order.total += price * quantity;
+    }
+  }
+
+  return [...orders.values()].map((order) => {
+    const discount = order.total >= 50 ? order.total * 0.1 : 0;
+    return {
+      ...order,
+      total: Number((order.total - discount).toFixed(2)),
+    };
+  });
+}
+
+app.post('/orders', requireCustomer, async (req, res) => {
+  const { items = [], address = {}, paymentMethod = 'Store payment' } = req.body || {};
+  if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'At least one order item is required' });
+
+  const pool = await applicationPoolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    const user = serializeUser(await findUserById(transaction, req.user.sub));
+    if (!user) throw createHttpError(401, 'Account no longer exists');
+    const customerId = await ensureCustomerForUser(transaction, user, address);
+    const createdAt = new Date();
 
     const orderResult = await new sql.Request(transaction)
-      .input('customer', sql.Int, toPositiveInt(customerId))
-      .input('streetAddress', sql.NVarChar(255), address.streetAddress || null)
-      .input('postCode', sql.Int, toPositiveInt(address.postCode))
-      .input('suburb', sql.NVarChar(255), address.suburb || null)
-      .input('state', sql.NVarChar(50), address.state || null)
+      .input('customerId', sql.Int, customerId)
+      .input('streetAddress', sql.NVarChar(255), cleanText(address.streetAddress) || user.address.streetAddress || null)
+      .input('postCode', sql.Int, toPositiveInt(address.postCode) || toPositiveInt(user.address.postCode))
+      .input('suburb', sql.NVarChar(50), cleanText(address.suburb, 50) || user.address.suburb || null)
+      .input('state', sql.NVarChar(50), cleanText(address.state, 50) || user.address.state || null)
       .query(`
         INSERT INTO dbo.Orders (customer, StreetAddress, PostCode, Suburb, State)
         OUTPUT INSERTED.OrderID
-        VALUES (@customer, @streetAddress, @postCode, @suburb, @state)
+        VALUES (@customerId, @streetAddress, @postCode, @suburb, @state)
       `);
 
     const orderId = toPositiveInt(orderResult.recordset?.[0]?.OrderID);
     const savedItems = [];
+    let total = 0;
 
     for (const item of items) {
-      const stockItemId = await resolveStockItemId(transaction, item);
       const quantity = Math.max(1, toPositiveInt(item.quantity) || 1);
+      const stock = await resolveStockRecord(transaction, item, quantity);
+      if (!stock) throw createHttpError(409, `Insufficient stock for product ${item.productId ?? item.id ?? 'unknown'}`);
 
-      if (!stockItemId) {
-        throw new Error(`No Stocktake item found for product ${item.productId ?? item.id ?? 'unknown'}`);
-      }
+      await new sql.Request(transaction)
+        .input('stockItemId', sql.Int, stock.ItemId)
+        .input('quantity', sql.Int, quantity)
+        .query('UPDATE dbo.Stocktake SET Quantity = Quantity - @quantity WHERE ItemId = @stockItemId');
 
       await new sql.Request(transaction)
         .input('orderId', sql.Int, orderId)
-        .input('stockItemId', sql.Int, stockItemId)
+        .input('stockItemId', sql.Int, stock.ItemId)
         .input('quantity', sql.Int, quantity)
         .query(`
           INSERT INTO dbo.ProductsInOrders (OrderId, produktId, Quantity)
           VALUES (@orderId, @stockItemId, @quantity)
         `);
 
+      const price = Number(stock.Price || 0);
+      total += price * quantity;
       savedItems.push({
-        productId: toPositiveInt(item.productId ?? item.id),
-        stockItemId,
+        productId: Number(stock.ProductId),
+        stockItemId: Number(stock.ItemId),
+        title: stock.Name,
         quantity,
+        price,
       });
     }
 
-    await transaction.commit();
+    const discount = total >= 50 ? total * 0.1 : 0;
+    total = Number((total - discount).toFixed(2));
 
-    res.status(201).json({
+    await transaction.commit();
+    return res.status(201).json({
       orderId,
-      itemCount: savedItems.length,
+      customerId,
+      status: 'Paid',
+      refundStatus: 'Not requested',
+      paymentMethod: cleanText(paymentMethod, 80) || 'Store payment',
+      createdAt: createdAt.toISOString(),
+      discount: Number(discount.toFixed(2)),
+      total,
+      itemCount: savedItems.reduce((sum, item) => sum + item.quantity, 0),
       items: savedItems,
     });
-  } catch (e) {
-    try {
-      await transaction.rollback();
-    } catch {
-      // The original database error is more useful for the caller.
-    }
-
-    console.error(e);
-    res.status(500).json({ error: e.message || 'order could not be saved' });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    console.error(error);
+    return res.status(error.status || 500).json({ error: error.message || 'Order could not be saved' });
   }
 });
 
-// ---------- AUTH ROUTES ----------
-// Expect body: { username, password }
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body ?? {};
-  if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+app.get('/orders', requireCustomer, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    const user = serializeUser(await findUserById(pool, req.user.sub));
+    if (!user) return res.status(401).json({ error: 'Account no longer exists' });
+    const customerId = user.customerId;
+    return res.json({ orders: await loadOrders(pool, customerId) });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Order history could not be loaded' });
+  }
+});
+
+app.get('/orders/:orderId', requireCustomer, async (req, res) => {
+  const orderId = toPositiveInt(req.params.orderId);
+  if (!orderId) return res.status(400).json({ error: 'Valid order id is required' });
 
   try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input('username', sql.VarChar, username)
-      .query(`
-        SELECT userid, username, hashpw, salt, email, isAdmin  
-        FROM [User]  
-        WHERE username = @username
-      `);
-
-    const user = result.recordset?.[0];
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-
-    const hash = crypto.createHash("sha256").update(user.salt + password, "utf8").digest("hex");
-    if (hash != user.hashpw) return res.status(401).json({ error: 'Invalid credentials' });
-
-    const token = signToken({ sub: user.userid, email: user.email, isAdmin: user.isAdmin });
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: NODE_ENV === 'production',
-      sameSite: NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: Number(JWT_EXPIRES) * 1000
-    });
-    res.json({ id: user.userid, email: user.email, username: user.username, isAdmin: user.isAdmin });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: 'server error' });
+    const pool = await applicationPoolPromise;
+    const user = serializeUser(await findUserById(pool, req.user.sub));
+    if (!user) return res.status(401).json({ error: 'Account no longer exists' });
+    const orders = await loadOrders(pool, user.customerId, orderId);
+    if (!orders.length) return res.status(404).json({ error: 'Order not found' });
+    return res.json({ order: orders[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Order could not be loaded' });
   }
 });
 
-app.post('/logout', (req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: NODE_ENV === 'production',
-    sameSite: NODE_ENV === 'production' ? 'none' : 'lax'
-  });
-  res.json({ ok: true });
+app.get('/library', requireCustomer, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    const user = serializeUser(await findUserById(pool, req.user.sub));
+    if (!user) return res.status(401).json({ error: 'Account no longer exists' });
+    const orders = await loadOrders(pool, user.customerId);
+    const products = new Map();
+
+    for (const order of orders) {
+      for (const item of order.items) {
+        const existing = products.get(item.productId);
+        products.set(item.productId, {
+          ...item,
+          ownedQuantity: Number(existing?.ownedQuantity || 0) + item.quantity,
+          orderId: existing?.orderId || order.orderId,
+          status: 'Owned',
+        });
+      }
+    }
+
+    return res.json({ items: [...products.values()] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Library could not be loaded' });
+  }
 });
 
-app.get('/me', authRequired, (req, res) => {
-  res.json({ id: req.user.sub, email: req.user.email });
+app.get('/admin/summary', requireAdmin, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    const result = await pool.request().query(`
+      SELECT
+        (SELECT COUNT(*) FROM dbo.Product) AS productCount,
+        (SELECT COUNT(*) FROM dbo.[User]) AS userCount,
+        (SELECT COUNT(*) FROM dbo.Orders) AS orderCount,
+        (SELECT COUNT(*) FROM dbo.Stocktake WHERE Quantity <= 5) AS lowStockCount
+    `);
+    return res.json({ summary: result.recordset[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Admin summary could not be loaded' });
+  }
+});
+
+async function listAdminProducts(pool) {
+  const result = await pool.request().query(`
+    SELECT
+      product.ID AS id,
+      product.Name AS name,
+      product.Author AS author,
+      product.Description AS description,
+      product.Genre AS genre,
+      product.subGenre AS subGenre,
+      genre.Name AS category,
+      COALESCE(bookGenre.Name, movieGenre.Name, gameGenre.Name) AS subCategory,
+      product.Published AS published,
+      product.LastUpdatedBy AS lastUpdatedBy,
+      product.LastUpdated AS lastUpdated,
+      stock.ItemId AS stockItemId,
+      stock.Price AS price,
+      stock.Quantity AS quantity
+    FROM dbo.Product product
+    LEFT JOIN dbo.Genre genre ON genre.genreID = product.Genre
+    LEFT JOIN dbo.Book_genre bookGenre
+      ON product.Genre = 1 AND bookGenre.subGenreID = product.subGenre
+    LEFT JOIN dbo.Movie_genre movieGenre
+      ON product.Genre = 2 AND movieGenre.subGenreID = product.subGenre
+    LEFT JOIN dbo.Game_genre gameGenre
+      ON product.Genre = 3 AND gameGenre.subGenreID = product.subGenre
+    OUTER APPLY (
+      SELECT TOP 1 ItemId, Price, Quantity
+      FROM dbo.Stocktake
+      WHERE ProductId = product.ID
+      ORDER BY CASE WHEN Quantity > 0 THEN 0 ELSE 1 END, Price, ItemId
+    ) stock
+    ORDER BY product.ID
+  `);
+  return result.recordset;
+}
+
+async function listStoreUsers(pool) {
+  const result = await pool.request().query(`
+    SELECT
+      users.UserID AS id,
+      users.UserName AS username,
+      users.Email AS email,
+      users.Name AS name,
+      users.isAdmin AS isAdmin,
+      CASE
+        WHEN users.isAdmin = 1 THEN N'Admin'
+        WHEN customer.customerID IS NOT NULL THEN N'Customer'
+        ELSE N'Employee'
+      END AS role,
+      customer.customerID AS customerId
+    FROM dbo.[User] users
+    OUTER APPLY (
+      SELECT TOP 1 account.customerID
+      FROM dbo.[TO] account
+      WHERE users.Email IS NOT NULL AND LOWER(account.Email) = LOWER(users.Email)
+      ORDER BY account.customerID
+    ) customer
+    ORDER BY users.UserID
+  `);
+
+  return result.recordset.map((user) => ({
+    ...user,
+    isAdmin: Boolean(user.isAdmin),
+    role: normalizeRole(user.role, user.isAdmin ? 'Admin' : 'Customer'),
+    customerId: toPositiveInt(user.customerId),
+  }));
+}
+
+app.get('/staff/summary', requireStaff, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    const result = await pool.request().query(`
+      SELECT
+        (SELECT COUNT(*) FROM dbo.Product) AS productCount,
+        (SELECT COUNT(*) FROM dbo.[User]) AS userCount,
+        (SELECT COUNT(*) FROM dbo.Orders) AS orderCount,
+        (SELECT COUNT(*) FROM dbo.Stocktake WHERE Quantity <= 5) AS lowStockCount
+    `);
+    return res.json({ summary: result.recordset[0] });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Employee summary could not be loaded' });
+  }
+});
+
+app.get('/staff/products', requireStaff, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    return res.json({ products: await listAdminProducts(pool) });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Employee product view could not be loaded' });
+  }
+});
+
+app.get('/staff/users', requireStaff, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    return res.json({ users: await listStoreUsers(pool) });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Employee account view could not be loaded' });
+  }
+});
+
+app.get('/admin/products', requireAdmin, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    return res.json({ products: await listAdminProducts(pool) });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Products could not be loaded' });
+  }
+});
+
+const SUBGENRE_TABLE_BY_GENRE = {
+  1: 'dbo.Book_genre',
+  2: 'dbo.Movie_genre',
+  3: 'dbo.Game_genre',
+};
+
+async function requireValidSubgenre(context, genre, subGenre) {
+  const tableName = SUBGENRE_TABLE_BY_GENRE[genre];
+  if (!tableName) throw createHttpError(400, 'Valid product category is required');
+
+  const result = await new sql.Request(context)
+    .input('subGenre', sql.Int, subGenre)
+    .query(`SELECT subGenreID FROM ${tableName} WHERE subGenreID = @subGenre`);
+  if (!result.recordset?.length) throw createHttpError(400, 'The selected subcategory does not belong to this category');
+}
+
+app.get('/admin/product-options', requireAdmin, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    const [genres, books, movies, games] = await Promise.all([
+      pool.request().query('SELECT genreID AS id, Name AS name FROM dbo.Genre ORDER BY genreID'),
+      pool.request().query('SELECT subGenreID AS id, Name AS name FROM dbo.Book_genre ORDER BY subGenreID'),
+      pool.request().query('SELECT subGenreID AS id, Name AS name FROM dbo.Movie_genre ORDER BY subGenreID'),
+      pool.request().query('SELECT subGenreID AS id, Name AS name FROM dbo.Game_genre ORDER BY subGenreID'),
+    ]);
+    const subgenres = {
+      1: books.recordset,
+      2: movies.recordset,
+      3: games.recordset,
+    };
+    return res.json({
+      genres: genres.recordset.map((genre) => ({
+        ...genre,
+        subgenres: (subgenres[genre.id] || []).filter((record) => {
+          const name = String(record.name || '').trim();
+          return name && !/^<.*>$/.test(name);
+        }),
+      })),
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Product categories could not be loaded' });
+  }
+});
+
+app.post('/admin/products', requireAdmin, async (req, res) => {
+  const name = cleanText(req.body?.name, 255);
+  const genre = toPositiveInt(req.body?.genre);
+  const subGenre = toPositiveInt(req.body?.subGenre);
+  const price = toNonNegativeNumber(req.body?.price);
+  const quantity = toNonNegativeNumber(req.body?.quantity);
+  if (!name || !genre || !subGenre || price === null || !Number.isInteger(quantity)) {
+    return res.status(400).json({ error: 'Name, genre, subgenre, price, and whole-number quantity are required' });
+  }
+
+  const pool = await applicationPoolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    await requireValidSubgenre(transaction, genre, subGenre);
+    const productResult = await new sql.Request(transaction)
+      .input('name', sql.NVarChar(255), name)
+      .input('author', sql.NVarChar(255), cleanText(req.body?.author, 255))
+      .input('description', sql.NVarChar(sql.MAX), cleanText(req.body?.description, 4000))
+      .input('genre', sql.Int, genre)
+      .input('subGenre', sql.Int, subGenre)
+      .input('published', sql.Date, req.body?.published || null)
+      .input('updatedBy', sql.NVarChar(50), req.user.username)
+      .query(`
+        INSERT INTO dbo.Product (Name, Author, Description, Genre, subGenre, Published, LastUpdatedBy, LastUpdated)
+        OUTPUT INSERTED.ID
+        VALUES (@name, @author, @description, @genre, @subGenre, @published, @updatedBy, GETDATE())
+      `);
+    const productId = toPositiveInt(productResult.recordset?.[0]?.ID);
+    await new sql.Request(transaction)
+      .input('productId', sql.Int, productId)
+      .input('price', sql.Float, price)
+      .input('quantity', sql.Int, quantity)
+      .query('INSERT INTO dbo.Stocktake (ProductId, Price, Quantity) VALUES (@productId, @price, @quantity)');
+    await transaction.commit();
+    return res.status(201).json({ productId });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    console.error(error);
+    return res.status(error.status || 500).json({ error: error.message || 'Product could not be created' });
+  }
+});
+
+app.put('/admin/products/:productId', requireAdmin, async (req, res) => {
+  const productId = toPositiveInt(req.params.productId);
+  const name = cleanText(req.body?.name, 255);
+  const genre = toPositiveInt(req.body?.genre);
+  const subGenre = toPositiveInt(req.body?.subGenre);
+  const price = toNonNegativeNumber(req.body?.price);
+  const quantity = toNonNegativeNumber(req.body?.quantity);
+  if (!productId || !name || !genre || !subGenre || price === null || !Number.isInteger(quantity)) {
+    return res.status(400).json({ error: 'Valid product fields are required' });
+  }
+
+  const pool = await applicationPoolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    await requireValidSubgenre(transaction, genre, subGenre);
+    const updated = await new sql.Request(transaction)
+      .input('productId', sql.Int, productId)
+      .input('name', sql.NVarChar(255), name)
+      .input('author', sql.NVarChar(255), cleanText(req.body?.author, 255))
+      .input('description', sql.NVarChar(sql.MAX), cleanText(req.body?.description, 4000))
+      .input('genre', sql.Int, genre)
+      .input('subGenre', sql.Int, subGenre)
+      .input('published', sql.Date, req.body?.published || null)
+      .input('updatedBy', sql.NVarChar(50), req.user.username)
+      .query(`
+        UPDATE dbo.Product
+        SET Name = @name, Author = @author, Description = @description,
+            Genre = @genre, subGenre = @subGenre, Published = @published,
+            LastUpdatedBy = @updatedBy, LastUpdated = GETDATE()
+        WHERE ID = @productId
+      `);
+    if (!updated.rowsAffected[0]) throw createHttpError(404, 'Product not found');
+
+    const stockItemId = toPositiveInt(req.body?.stockItemId);
+    const stockRequest = new sql.Request(transaction)
+      .input('productId', sql.Int, productId)
+      .input('price', sql.Float, price)
+      .input('quantity', sql.Int, quantity);
+    if (stockItemId) {
+      stockRequest.input('stockItemId', sql.Int, stockItemId);
+      await stockRequest.query('UPDATE dbo.Stocktake SET Price = @price, Quantity = @quantity WHERE ItemId = @stockItemId AND ProductId = @productId');
+    } else {
+      await stockRequest.query('INSERT INTO dbo.Stocktake (ProductId, Price, Quantity) VALUES (@productId, @price, @quantity)');
+    }
+    await transaction.commit();
+    return res.json({ ok: true });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    return res.status(error.status || 500).json({ error: error.message || 'Product could not be updated' });
+  }
+});
+
+app.delete('/admin/products/:productId', requireAdmin, async (req, res) => {
+  const productId = toPositiveInt(req.params.productId);
+  if (!productId) return res.status(400).json({ error: 'Valid product id is required' });
+
+  const pool = await applicationPoolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    const references = await new sql.Request(transaction)
+      .input('productId', sql.Int, productId)
+      .query(`
+        SELECT COUNT(*) AS referenceCount
+        FROM dbo.ProductsInOrders lines
+        JOIN dbo.Stocktake stock ON stock.ItemId = lines.produktId
+        WHERE stock.ProductId = @productId
+      `);
+    if (Number(references.recordset[0].referenceCount) > 0) {
+      throw createHttpError(409, 'Products included in previous orders cannot be deleted');
+    }
+    await new sql.Request(transaction).input('productId', sql.Int, productId).query('DELETE FROM dbo.Stocktake WHERE ProductId = @productId');
+    const removed = await new sql.Request(transaction).input('productId', sql.Int, productId).query('DELETE FROM dbo.Product WHERE ID = @productId');
+    if (!removed.rowsAffected[0]) throw createHttpError(404, 'Product not found');
+    await transaction.commit();
+    return res.json({ ok: true });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    return res.status(error.status || 500).json({ error: error.message || 'Product could not be deleted' });
+  }
+});
+
+app.get('/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    return res.json({ users: await listStoreUsers(pool) });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: 'Users could not be loaded' });
+  }
+});
+
+app.post('/admin/users', requireAdmin, async (req, res) => {
+  const pool = await applicationPoolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    const user = serializeUser(await createUser(transaction, req.body || {}, true));
+    await transaction.commit();
+    return res.status(201).json({ user });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    return res.status(error.status || 500).json({ error: error.message || 'User could not be created' });
+  }
+});
+
+async function removeCustomerRecordForEmployee(transaction, email) {
+  const customer = await new sql.Request(transaction)
+    .input('email', sql.NVarChar(255), email)
+    .query(`
+      SELECT TOP 1
+        account.customerID,
+        (SELECT COUNT(*) FROM dbo.Orders orders WHERE orders.customer = account.customerID) AS orderCount
+      FROM dbo.[TO] account
+      WHERE LOWER(account.Email) = LOWER(@email)
+      ORDER BY account.customerID
+    `);
+
+  const record = customer.recordset?.[0];
+  if (!record) return;
+  if (Number(record.orderCount) > 0) {
+    throw createHttpError(409, 'A customer with order history cannot be converted to Employee. Create a separate Employee account instead.');
+  }
+
+  await new sql.Request(transaction)
+    .input('customerId', sql.Int, record.customerID)
+    .query('DELETE FROM dbo.[TO] WHERE customerID = @customerId');
+}
+
+app.put('/admin/users/:userId', requireAdmin, async (req, res) => {
+  const userId = toPositiveInt(req.params.userId);
+  const name = cleanText(req.body?.name, 255);
+  const email = cleanText(req.body?.email, 255)?.toLowerCase();
+  const requestedRole = req.body?.role || (req.body?.isAdmin ? 'Admin' : 'Customer');
+  const role = normalizeRole(requestedRole, null);
+  const isAdmin = role === 'Admin';
+  if (!userId || !name || !email || !role || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Valid user fields are required' });
+  }
+  if (Number(req.user.sub) === userId && role !== 'Admin') {
+    return res.status(400).json({ error: 'You cannot remove your own admin access' });
+  }
+
+  const pool = await applicationPoolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    const current = await findUserById(transaction, userId);
+    if (!current) throw createHttpError(404, 'User not found');
+    const duplicate = await new sql.Request(transaction)
+      .input('userId', sql.Int, userId)
+      .input('email', sql.NVarChar(255), email)
+      .query('SELECT UserID FROM dbo.[User] WHERE UserID <> @userId AND LOWER(Email) = LOWER(@email)');
+    if (duplicate.recordset?.length) throw createHttpError(409, 'Email is already registered');
+
+    await new sql.Request(transaction)
+      .input('userId', sql.Int, userId)
+      .input('name', sql.NVarChar(255), name)
+      .input('email', sql.NVarChar(255), email)
+      .input('isAdmin', sql.Bit, isAdmin)
+      .query('UPDATE dbo.[User] SET Name = @name, Email = @email, isAdmin = @isAdmin WHERE UserID = @userId');
+    if (current.email) {
+      await new sql.Request(transaction)
+        .input('oldEmail', sql.NVarChar(255), current.email)
+        .input('email', sql.NVarChar(255), email)
+        .query('UPDATE dbo.[TO] SET Email = @email WHERE LOWER(Email) = LOWER(@oldEmail)');
+    }
+    if (role === 'Customer') {
+      await ensureCustomerForUser(transaction, { id: userId, email }, {});
+    } else if (role === 'Employee') {
+      await removeCustomerRecordForEmployee(transaction, email);
+    }
+    const user = serializeUser(await findUserById(transaction, userId));
+    await transaction.commit();
+    return res.json({ user });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    return res.status(error.status || 500).json({ error: error.message || 'User could not be updated' });
+  }
+});
+
+app.delete('/admin/users/:userId', requireAdmin, async (req, res) => {
+  const userId = toPositiveInt(req.params.userId);
+  if (!userId) return res.status(400).json({ error: 'Valid user id is required' });
+  if (Number(req.user.sub) === userId) return res.status(400).json({ error: 'You cannot delete your own account' });
+
+  const pool = await applicationPoolPromise;
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
+    const user = await findUserById(transaction, userId);
+    if (!user) throw createHttpError(404, 'User not found');
+
+    const references = await new sql.Request(transaction)
+      .input('username', sql.NVarChar(50), user.username)
+      .input('email', sql.NVarChar(255), user.email)
+      .query(`
+        SELECT
+          (SELECT COUNT(*) FROM dbo.Product WHERE LastUpdatedBy = @username) AS productReferences,
+          (
+            SELECT COUNT(*)
+            FROM dbo.Orders orders
+            JOIN dbo.[TO] customer ON customer.customerID = orders.customer
+            WHERE LOWER(customer.Email) = LOWER(@email)
+          ) AS orderReferences
+      `);
+
+    const referenceCounts = references.recordset[0];
+    if (Number(referenceCounts.productReferences) > 0) {
+      throw createHttpError(409, 'User cannot be deleted because product records reference this account');
+    }
+    if (Number(referenceCounts.orderReferences) > 0) {
+      throw createHttpError(409, 'User cannot be deleted because order history is linked to this account');
+    }
+
+    await new sql.Request(transaction)
+      .input('email', sql.NVarChar(255), user.email)
+      .query('DELETE FROM dbo.[TO] WHERE LOWER(Email) = LOWER(@email)');
+    await new sql.Request(transaction)
+      .input('userId', sql.Int, userId)
+      .query('DELETE FROM dbo.[User] WHERE UserID = @userId');
+    await transaction.commit();
+    return res.json({ ok: true });
+  } catch (error) {
+    try { await transaction.rollback(); } catch { /* No active transaction. */ }
+    return res.status(error.status || 500).json({ error: error.message || 'User could not be deleted' });
+  }
+});
+
+app.get('/health', async (req, res) => {
+  try {
+    const pool = await applicationPoolPromise;
+    await pool.request().query('SELECT 1 AS ok');
+    return res.json({ ok: true, database: MSSQL_DB });
+  } catch {
+    return res.status(503).json({ ok: false, database: MSSQL_DB });
+  }
 });
 
 app.listen(PORT, () => {
-  console.log(`Auth server listening on :${PORT}`);
+  console.log(`Store API server listening on :${PORT}`);
 });
