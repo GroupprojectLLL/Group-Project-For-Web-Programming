@@ -20,7 +20,7 @@ export default function WishlistPage({ user, products, addToCart, viewProduct, n
     }
 
     setLoading(true);
-    fetchWishlist(user.id)
+    fetchWishlist(user.accountKey || user.id)
       .then((records) => {
         if (!ignore) {
           setItems(records);
@@ -47,7 +47,7 @@ export default function WishlistPage({ user, products, addToCart, viewProduct, n
     setError('');
     setMessage('');
     try {
-      await removeWishlistItem(user.id, product.id);
+      await removeWishlistItem(user.accountKey || user.id, product.id);
       setItems((current) => current.filter((item) => String(item.productId) !== String(product.id)));
       setMessage(`${product.title} removed from your wishlist.`);
       return true;

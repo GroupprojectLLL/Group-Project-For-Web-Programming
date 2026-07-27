@@ -44,7 +44,7 @@ export default function AdminDashboardPage({ user, navigate }) {
           <div className="workspace-panel admin-guidance">
             <h2>Database administration</h2>
             <p>Product and user changes are written directly to the provided StoreDB and require an authenticated admin account.</p>
-            <p>Roles use the supplied schema: isAdmin identifies Admin accounts, a matching customer record identifies Customers, and other non-admin accounts are Employees.</p>
+            <p>Customers use the Patrons and TO tables. Employee and Admin accounts use the User table, with isAdmin identifying administrators.</p>
           </div>
         </section>
       </div>

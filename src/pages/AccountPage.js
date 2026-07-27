@@ -29,7 +29,6 @@ export default function AccountPage({ user, onAuth, checkoutPending, navigate })
   const [profileDraft, setProfileDraft] = useState(() => buildProfileDraft(user));
   const [registration, setRegistration] = useState({
     name: '',
-    username: '',
     email: '',
     password: '',
     confirmPassword: '',
@@ -79,12 +78,11 @@ export default function AccountPage({ user, onAuth, checkoutPending, navigate })
     try {
       const authenticatedUser = await registerUser({
         name: registration.name,
-        username: registration.username,
         email: registration.email,
         password: registration.password,
       });
       onAuth?.(authenticatedUser);
-      setRegistration({ name: '', username: '', email: '', password: '', confirmPassword: '' });
+      setRegistration({ name: '', email: '', password: '', confirmPassword: '' });
       setMessage('Your customer account was created in StoreDB and is ready to use.');
       setView('profile');
     } catch (registrationError) {
@@ -160,7 +158,7 @@ export default function AccountPage({ user, onAuth, checkoutPending, navigate })
       <form className="account-form" key="login" onSubmit={submitLogin}>
         <span className="eyebrow">Welcome back</span>
         <h2>Sign in to your account</h2>
-        <p>Use the username or email stored in StoreDB.</p>
+        <p>Customers sign in with email. Staff may use their username or email.</p>
         <Field
           label="Email address or username"
           value={identifier}
@@ -191,9 +189,8 @@ export default function AccountPage({ user, onAuth, checkoutPending, navigate })
         <button className="account-back" type="button" onClick={() => changeView('login')}><Icon name="arrow" size={15} /> Back to login</button>
         <span className="eyebrow">Join the community</span>
         <h2>Create your account</h2>
-        <p>A customer login and customer record will be created together.</p>
+        <p>Your email login and customer record will be created together in StoreDB.</p>
         <Field label="Full name" value={registration.name} onChange={updateRegistration('name')} placeholder="Morgan Lee" autoComplete="name" />
-        <Field label="Username" value={registration.username} onChange={updateRegistration('username')} placeholder="morganlee" minLength={3} autoComplete="username" />
         <Field label="Email address" type="email" value={registration.email} onChange={updateRegistration('email')} placeholder="you@example.com" autoComplete="email" />
         <Field label="Password" type="password" value={registration.password} onChange={updateRegistration('password')} placeholder="At least 8 characters" minLength={8} autoComplete="new-password" />
         <Field label="Confirm password" type="password" value={registration.confirmPassword} onChange={updateRegistration('confirmPassword')} placeholder="Enter the same password" minLength={8} autoComplete="new-password" />
@@ -274,7 +271,7 @@ export default function AccountPage({ user, onAuth, checkoutPending, navigate })
           ) : (
             <div className="profile-info-grid">
               <span><small>Full name</small><strong>{displayName}</strong></span>
-              <span><small>Username</small><strong>{user.username}</strong></span>
+              {user.accountSource !== 'patron' && <span><small>Username</small><strong>{user.username}</strong></span>}
               <span><small>Email address</small><strong>{user.email || 'Not supplied'}</strong></span>
               <span><small>Phone number</small><strong>{user.phoneNumber || 'Not supplied'}</strong></span>
               {user.role === 'Customer' && <span><small>Street address</small><strong>{user.address?.streetAddress || 'Not supplied'}</strong></span>}

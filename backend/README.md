@@ -19,4 +19,4 @@ The `db` and `noco` runtime directories are ignored by Git. Use the StoreDB file
 
 The Express service implements account sessions, customer registration and profile updates, order transactions, order-history reads, My Library data, safe payment-method storage, employee read-only views, and admin product/user management. Product catalogue reads continue through `/api/inft3050`.
 
-The API does not change the supplied database structure. Customer, Employee, and Admin roles are inferred from the existing `User.isAdmin` field and the user's relationship with `TO`. Checkout writes only the original `Orders` and `ProductsInOrders` fields and updates `Stocktake.Quantity`. Wishlist selections remain a browser preference because StoreDB does not provide a wishlist table.
+The API is designed to work with the course-supplied StoreDB without running schema migrations. It supports Customer, Employee, and Admin workflows, preserves compatibility with existing course accounts, and keeps prototype wishlist selections in the browser.

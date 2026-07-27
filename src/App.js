@@ -241,7 +241,7 @@ export default function App() {
     }
 
     try {
-      const result = await saveWishlistItem(user.id, product.id);
+      const result = await saveWishlistItem(user.accountKey || user.id, product.id);
       showToast(result.created ? `${product.title} added to wishlist` : `${product.title} is already in your wishlist`);
     } catch (error) {
       showToast(`Wishlist could not be updated: ${error.message}`, 'error');

@@ -149,8 +149,8 @@ export default function EmployeeDashboardPage({ user, navigate }) {
             <div className="admin-data-table staff-account-table">
               <div className="admin-data-header"><span>ID</span><span>Account</span><span>Email</span><span>Role</span></div>
               {visibleRecords.map((record) => (
-                <article key={record.id}>
-                  <span>{record.id}</span>
+                <article key={record.accountKey || `${record.accountSource || 'user'}:${record.id}`}>
+                  <span>{record.accountSource === 'patron' ? `Patron ${record.id}` : `User ${record.id}`}</span>
                   <span><strong>{record.name || record.username}</strong><small>{record.username}</small></span>
                   <span>{record.email || 'No email'}</span>
                   <span>{record.role}</span>

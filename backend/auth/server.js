@@ -49,6 +49,7 @@ const poolPromise = new sql.ConnectionPool({
 const applicationPoolPromise = poolPromise;
 
 const ACCOUNT_ROLES = new Set(['Customer', 'Employee', 'Admin']);
+const ACCOUNT_SOURCES = new Set(['user', 'patron']);
 
 function normalizeRole(value, fallback = 'Customer') {
   const requested = String(value || '').trim().toLowerCase();
@@ -56,9 +57,15 @@ function normalizeRole(value, fallback = 'Customer') {
   return role || fallback;
 }
 
+function normalizeAccountSource(value, fallback = 'user') {
+  const requested = String(value || '').trim().toLowerCase();
+  return ACCOUNT_SOURCES.has(requested) ? requested : fallback;
+}
+
 function signToken(user) {
   return jwt.sign({
     sub: user.id,
+    accountSource: normalizeAccountSource(user.accountSource),
     email: user.email,
     username: user.username,
     isAdmin: Boolean(user.isAdmin),
@@ -70,6 +77,22 @@ function signToken(user) {
 function toPositiveInt(value) {
   const number = Number(value);
   return Number.isInteger(number) && number > 0 ? number : null;
+}
+
+function accountKey(accountSource, accountId) {
+  return `${normalizeAccountSource(accountSource)}:${toPositiveInt(accountId)}`;
+}
+
+function parseAccountReference(value) {
+  const text = String(value || '').trim();
+  const matched = text.match(/^(user|patron):(\d+)$/i);
+  if (matched) {
+    const id = toPositiveInt(matched[2]);
+    return id ? { accountSource: normalizeAccountSource(matched[1]), id } : null;
+  }
+
+  const id = toPositiveInt(text);
+  return id ? { accountSource: 'user', id } : null;
 }
 
 function toNonNegativeNumber(value, fallback = null) {
@@ -132,7 +155,8 @@ async function requireAuth(req, res, next) {
 
   try {
     const pool = await applicationPoolPromise;
-    const account = serializeUser(await findUserById(pool, session.sub));
+    const source = normalizeAccountSource(session.accountSource, 'user');
+    const account = serializeUser(await findAccountById(pool, source, session.sub));
     if (!account) {
       clearSessionCookie(res);
       return res.status(401).json({ error: 'Account no longer exists' });
@@ -146,6 +170,8 @@ async function requireAuth(req, res, next) {
       role: account.role,
       isAdmin: account.isAdmin,
       customerId: account.customerId,
+      accountSource: account.accountSource,
+      accountKey: account.accountKey,
     };
     return next();
   } catch (error) {
@@ -183,21 +209,19 @@ function requireCustomer(req, res, next) {
   });
 }
 
-async function findUserById(context, userId) {
-  const result = await new sql.Request(context)
-    .input('userId', sql.Int, toPositiveInt(userId))
-    .query(`
+async function findAccountById(context, accountSource, accountId) {
+  const source = normalizeAccountSource(accountSource);
+  const request = new sql.Request(context).input('accountId', sql.Int, toPositiveInt(accountId));
+  const query = source === 'patron'
+    ? `
       SELECT TOP 1
-        u.UserID AS id,
-        u.UserName AS username,
-        u.Email AS email,
-        u.Name AS name,
-        u.isAdmin AS isAdmin,
-        CASE
-          WHEN u.isAdmin = 1 THEN N'Admin'
-          WHEN customer.customerID IS NOT NULL THEN N'Customer'
-          ELSE N'Employee'
-        END AS accessRole,
+        patron.UserID AS id,
+        patron.Email AS username,
+        patron.Email AS email,
+        patron.Name AS name,
+        CAST(0 AS bit) AS isAdmin,
+        N'Customer' AS accessRole,
+        N'patron' AS accountSource,
         customer.customerID AS customerId,
         customer.PhoneNumber AS phoneNumber,
         customer.StreetAddress AS streetAddress,
@@ -207,15 +231,52 @@ async function findUserById(context, userId) {
         customer.CardNumber AS cardNumber,
         customer.CardOwner AS cardOwner,
         customer.Expiry AS expiry
-      FROM dbo.[User] u
+      FROM dbo.Patrons patron
       OUTER APPLY (
-        SELECT TOP 1 c.*
-        FROM dbo.[TO] c
-        WHERE u.Email IS NOT NULL AND LOWER(c.Email) = LOWER(u.Email)
-        ORDER BY c.customerID
+        SELECT TOP 1 account.*
+        FROM dbo.[TO] account
+        WHERE account.PatronId = patron.UserID
+          OR (
+            account.PatronId IS NULL
+            AND patron.Email IS NOT NULL
+            AND LOWER(account.Email) = LOWER(patron.Email)
+          )
+        ORDER BY CASE WHEN account.PatronId = patron.UserID THEN 0 ELSE 1 END, account.customerID
       ) customer
-      WHERE u.UserID = @userId
-    `);
+      WHERE patron.UserID = @accountId
+    `
+    : `
+      SELECT TOP 1
+        account.UserID AS id,
+        account.UserName AS username,
+        account.Email AS email,
+        account.Name AS name,
+        account.isAdmin AS isAdmin,
+        CASE
+          WHEN account.isAdmin = 1 THEN N'Admin'
+          WHEN customer.customerID IS NOT NULL THEN N'Customer'
+          ELSE N'Employee'
+        END AS accessRole,
+        N'user' AS accountSource,
+        customer.customerID AS customerId,
+        customer.PhoneNumber AS phoneNumber,
+        customer.StreetAddress AS streetAddress,
+        customer.PostCode AS postCode,
+        customer.Suburb AS suburb,
+        customer.State AS state,
+        customer.CardNumber AS cardNumber,
+        customer.CardOwner AS cardOwner,
+        customer.Expiry AS expiry
+      FROM dbo.[User] account
+      OUTER APPLY (
+        SELECT TOP 1 customerRecord.*
+        FROM dbo.[TO] customerRecord
+        WHERE account.Email IS NOT NULL AND LOWER(customerRecord.Email) = LOWER(account.Email)
+        ORDER BY customerRecord.customerID
+      ) customer
+      WHERE account.UserID = @accountId
+    `;
+  const result = await request.query(query);
 
   return result.recordset?.[0] || null;
 }
@@ -223,12 +284,16 @@ async function findUserById(context, userId) {
 function serializeUser(row) {
   if (!row) return null;
   const cardDigits = String(row.cardNumber || '').replace(/\D/g, '');
+  const accountSource = normalizeAccountSource(row.accountSource);
+  const id = Number(row.id);
 
   return {
-    id: Number(row.id),
-    username: row.username,
+    id,
+    accountSource,
+    accountKey: accountKey(accountSource, id),
+    username: row.username || row.email,
     email: row.email,
-    name: row.name || row.username,
+    name: row.name || row.username || row.email,
     isAdmin: Boolean(row.isAdmin),
     role: normalizeRole(row.accessRole, row.isAdmin ? 'Admin' : 'Customer'),
     customerId: row.customerId ? Number(row.customerId) : null,
@@ -247,14 +312,20 @@ function serializeUser(row) {
 
 async function ensureCustomerForUser(transaction, user, address = {}) {
   if (!user.email) throw createHttpError(400, 'A customer email is required before checkout');
+  const patronId = user.accountSource === 'patron' ? toPositiveInt(user.id) : null;
 
   const existing = await new sql.Request(transaction)
+    .input('patronId', sql.Int, patronId)
     .input('email', sql.NVarChar(255), user.email)
     .query(`
       SELECT TOP 1 customerID
       FROM dbo.[TO] WITH (UPDLOCK, HOLDLOCK)
-      WHERE LOWER(Email) = LOWER(@email)
-      ORDER BY customerID
+      WHERE (@patronId IS NOT NULL AND PatronId = @patronId)
+         OR (
+           LOWER(Email) = LOWER(@email)
+           AND (@patronId IS NULL OR PatronId IS NULL OR PatronId = @patronId)
+         )
+      ORDER BY CASE WHEN PatronId = @patronId THEN 0 ELSE 1 END, customerID
     `);
 
   const customerId = toPositiveInt(existing.recordset?.[0]?.customerID);
@@ -264,16 +335,18 @@ async function ensureCustomerForUser(transaction, user, address = {}) {
   const state = cleanText(address.state, 50);
 
   if (customerId) {
-    if (streetAddress || postCode || suburb || state) {
+    if (patronId || streetAddress || postCode || suburb || state) {
       await new sql.Request(transaction)
         .input('customerId', sql.Int, customerId)
+        .input('patronId', sql.Int, patronId)
         .input('streetAddress', sql.NVarChar(255), streetAddress)
         .input('postCode', sql.Int, postCode)
         .input('suburb', sql.NVarChar(50), suburb)
         .input('state', sql.NVarChar(50), state)
         .query(`
           UPDATE dbo.[TO]
-          SET StreetAddress = COALESCE(@streetAddress, StreetAddress),
+          SET PatronId = COALESCE(PatronId, @patronId),
+              StreetAddress = COALESCE(@streetAddress, StreetAddress),
               PostCode = COALESCE(@postCode, PostCode),
               Suburb = COALESCE(@suburb, Suburb),
               State = COALESCE(@state, State)
@@ -284,48 +357,99 @@ async function ensureCustomerForUser(transaction, user, address = {}) {
   }
 
   const inserted = await new sql.Request(transaction)
+    .input('patronId', sql.Int, patronId)
     .input('email', sql.NVarChar(255), user.email)
     .input('streetAddress', sql.NVarChar(255), streetAddress)
     .input('postCode', sql.Int, postCode)
     .input('suburb', sql.NVarChar(50), suburb)
     .input('state', sql.NVarChar(50), state)
     .query(`
-      INSERT INTO dbo.[TO] (Email, StreetAddress, PostCode, Suburb, State)
+      INSERT INTO dbo.[TO] (PatronId, Email, StreetAddress, PostCode, Suburb, State)
       OUTPUT INSERTED.customerID
-      VALUES (@email, @streetAddress, @postCode, @suburb, @state)
+      VALUES (@patronId, @email, @streetAddress, @postCode, @suburb, @state)
     `);
 
   return toPositiveInt(inserted.recordset?.[0]?.customerID);
 }
 
-async function createUser(transaction, input, allowRoleSelection = false) {
-  const username = cleanText(input.username, 50);
+async function findDuplicateAccount(context, {
+  username = null,
+  email,
+  excludeSource = null,
+  excludeId = null,
+}) {
+  const excludedUserId = excludeSource === 'user' ? toPositiveInt(excludeId) : null;
+  const excludedPatronId = excludeSource === 'patron' ? toPositiveInt(excludeId) : null;
+  const result = await new sql.Request(context)
+    .input('username', sql.NVarChar(50), username)
+    .input('email', sql.NVarChar(255), email)
+    .input('excludedUserId', sql.Int, excludedUserId)
+    .input('excludedPatronId', sql.Int, excludedPatronId)
+    .query(`
+      SELECT TOP 1 accountSource, accountId
+      FROM (
+        SELECT N'user' AS accountSource, UserID AS accountId
+        FROM dbo.[User]
+        WHERE (
+          (@username IS NOT NULL AND LOWER(UserName) = LOWER(@username))
+          OR LOWER(Email) = LOWER(@email)
+        )
+        AND (@excludedUserId IS NULL OR UserID <> @excludedUserId)
+
+        UNION ALL
+
+        SELECT N'patron' AS accountSource, UserID AS accountId
+        FROM dbo.Patrons
+        WHERE LOWER(Email) = LOWER(@email)
+          AND (@excludedPatronId IS NULL OR UserID <> @excludedPatronId)
+      ) duplicateAccounts
+    `);
+  return result.recordset?.[0] || null;
+}
+
+async function createAccount(transaction, input, allowRoleSelection = false) {
   const email = cleanText(input.email, 255)?.toLowerCase();
   const name = cleanText(input.name, 255);
   const password = String(input.password || '');
   const requestedRole = input.role || (input.isAdmin ? 'Admin' : 'Customer');
   const role = allowRoleSelection ? normalizeRole(requestedRole, null) : 'Customer';
+  const username = role === 'Customer' ? email : cleanText(input.username, 50);
   const isAdmin = role === 'Admin';
 
-  if (!username || username.length < 3) throw createHttpError(400, 'Username must contain at least 3 characters');
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw createHttpError(400, 'A valid email address is required');
   if (!name) throw createHttpError(400, 'Name is required');
   if (password.length < 8) throw createHttpError(400, 'Password must contain at least 8 characters');
   if (!role || !ACCOUNT_ROLES.has(role)) throw createHttpError(400, 'Role must be Customer, Employee, or Admin');
+  if (role !== 'Customer' && (!username || username.length < 3)) {
+    throw createHttpError(400, 'Username must contain at least 3 characters');
+  }
 
-  const duplicate = await new sql.Request(transaction)
-    .input('username', sql.NVarChar(50), username)
-    .input('email', sql.NVarChar(255), email)
-    .query(`
-      SELECT TOP 1 UserID
-      FROM dbo.[User]
-      WHERE LOWER(UserName) = LOWER(@username) OR LOWER(Email) = LOWER(@email)
-    `);
-
-  if (duplicate.recordset?.length) throw createHttpError(409, 'Username or email is already registered');
+  if (await findDuplicateAccount(transaction, { username, email })) {
+    throw createHttpError(409, 'Username or email is already registered');
+  }
 
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = hashPassword(salt, password);
+
+  if (role === 'Customer') {
+    const insertedPatron = await new sql.Request(transaction)
+      .input('email', sql.NVarChar(255), email)
+      .input('name', sql.NVarChar(255), name)
+      .input('salt', sql.VarChar(32), salt)
+      .input('hash', sql.VarChar(64), hash)
+      .query(`
+        INSERT INTO dbo.Patrons (Email, Name, Salt, HashPW)
+        OUTPUT INSERTED.UserID
+        VALUES (@email, @name, @salt, @hash)
+      `);
+    const patronId = toPositiveInt(insertedPatron.recordset?.[0]?.UserID);
+    await new sql.Request(transaction)
+      .input('patronId', sql.Int, patronId)
+      .input('email', sql.NVarChar(255), email)
+      .query('INSERT INTO dbo.[TO] (PatronId, Email) VALUES (@patronId, @email)');
+    return findAccountById(transaction, 'patron', patronId);
+  }
+
   const inserted = await new sql.Request(transaction)
     .input('username', sql.NVarChar(50), username)
     .input('email', sql.NVarChar(255), email)
@@ -340,14 +464,7 @@ async function createUser(transaction, input, allowRoleSelection = false) {
     `);
 
   const userId = toPositiveInt(inserted.recordset?.[0]?.UserID);
-
-  if (role === 'Customer') {
-    await new sql.Request(transaction)
-      .input('email', sql.NVarChar(255), email)
-      .query('INSERT INTO dbo.[TO] (Email) VALUES (@email)');
-  }
-
-  return findUserById(transaction, userId);
+  return findAccountById(transaction, 'user', userId);
 }
 
 function extractTableFromPath(pathname) {
@@ -379,7 +496,7 @@ app.post('/register', async (req, res) => {
 
   try {
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-    const row = await createUser(transaction, req.body || {}, false);
+    const row = await createAccount(transaction, req.body || {}, false);
     await transaction.commit();
     const user = serializeUser(row);
     setSessionCookie(res, user);
@@ -400,17 +517,26 @@ app.post('/login', async (req, res) => {
     const result = await pool.request()
       .input('identifier', sql.NVarChar(255), identifier)
       .query(`
-        SELECT TOP 1 UserID, UserName, Email, Name, isAdmin, Salt, HashPW
+        SELECT N'user' AS accountSource, UserID, UserName, Email, Name, isAdmin, Salt, HashPW
         FROM dbo.[User]
         WHERE LOWER(UserName) = LOWER(@identifier) OR LOWER(Email) = LOWER(@identifier)
+
+        UNION ALL
+
+        SELECT N'patron' AS accountSource, UserID, Email AS UserName, Email, Name,
+               CAST(0 AS bit) AS isAdmin, Salt, HashPW
+        FROM dbo.Patrons
+        WHERE LOWER(Email) = LOWER(@identifier)
       `);
 
-    const record = result.recordset?.[0];
-    if (!record || !passwordsMatch(record.HashPW, hashPassword(record.Salt, password))) {
+    const record = result.recordset?.find(
+      (candidate) => passwordsMatch(candidate.HashPW, hashPassword(candidate.Salt, password)),
+    );
+    if (!record) {
       return res.status(401).json({ error: 'Invalid username, email, or password' });
     }
 
-    const user = serializeUser(await findUserById(pool, record.UserID));
+    const user = serializeUser(await findAccountById(pool, record.accountSource, record.UserID));
     setSessionCookie(res, user);
     return res.json({ user });
   } catch (error) {
@@ -430,7 +556,8 @@ app.get('/session', async (req, res) => {
 
   try {
     const pool = await applicationPoolPromise;
-    return res.json({ user: serializeUser(await findUserById(pool, session.sub)) });
+    const source = normalizeAccountSource(session.accountSource, 'user');
+    return res.json({ user: serializeUser(await findAccountById(pool, source, session.sub)) });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: 'Session could not be loaded' });
@@ -440,7 +567,7 @@ app.get('/session', async (req, res) => {
 app.get('/me', requireAuth, async (req, res) => {
   try {
     const pool = await applicationPoolPromise;
-    const user = serializeUser(await findUserById(pool, req.user.sub));
+    const user = serializeUser(await findAccountById(pool, req.user.accountSource, req.user.sub));
     if (!user) {
       clearSessionCookie(res);
       return res.status(401).json({ error: 'Account no longer exists' });
@@ -473,26 +600,45 @@ app.put('/me', requireAuth, async (req, res) => {
   const transaction = new sql.Transaction(pool);
   try {
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-    const current = await findUserById(transaction, req.user.sub);
+    const accountSource = normalizeAccountSource(req.user.accountSource, 'user');
+    const current = await findAccountById(transaction, accountSource, req.user.sub);
     if (!current) throw createHttpError(404, 'Account not found');
 
-    const duplicate = await new sql.Request(transaction)
-      .input('userId', sql.Int, req.user.sub)
-      .input('email', sql.NVarChar(255), email)
-      .query('SELECT UserID FROM dbo.[User] WHERE UserID <> @userId AND LOWER(Email) = LOWER(@email)');
-    if (duplicate.recordset?.length) throw createHttpError(409, 'Email is already registered');
+    if (await findDuplicateAccount(transaction, {
+      email,
+      excludeSource: accountSource,
+      excludeId: req.user.sub,
+    })) {
+      throw createHttpError(409, 'Email is already registered');
+    }
 
-    await new sql.Request(transaction)
-      .input('userId', sql.Int, req.user.sub)
-      .input('name', sql.NVarChar(255), name)
-      .input('email', sql.NVarChar(255), email)
-      .query('UPDATE dbo.[User] SET Name = @name, Email = @email WHERE UserID = @userId');
-
-    if (current.email) {
+    if (accountSource === 'patron') {
       await new sql.Request(transaction)
-        .input('oldEmail', sql.NVarChar(255), current.email)
+        .input('patronId', sql.Int, req.user.sub)
+        .input('name', sql.NVarChar(255), name)
         .input('email', sql.NVarChar(255), email)
-        .query('UPDATE dbo.[TO] SET Email = @email WHERE LOWER(Email) = LOWER(@oldEmail)');
+        .query('UPDATE dbo.Patrons SET Name = @name, Email = @email WHERE UserID = @patronId');
+      await new sql.Request(transaction)
+        .input('patronId', sql.Int, req.user.sub)
+        .input('customerId', sql.Int, current.customerId)
+        .input('email', sql.NVarChar(255), email)
+        .query(`
+          UPDATE dbo.[TO]
+          SET Email = @email
+          WHERE PatronId = @patronId OR customerID = @customerId
+        `);
+    } else {
+      await new sql.Request(transaction)
+        .input('userId', sql.Int, req.user.sub)
+        .input('name', sql.NVarChar(255), name)
+        .input('email', sql.NVarChar(255), email)
+        .query('UPDATE dbo.[User] SET Name = @name, Email = @email WHERE UserID = @userId');
+      if (current.email) {
+        await new sql.Request(transaction)
+          .input('oldEmail', sql.NVarChar(255), current.email)
+          .input('email', sql.NVarChar(255), email)
+          .query('UPDATE dbo.[TO] SET Email = @email WHERE LOWER(Email) = LOWER(@oldEmail)');
+      }
     }
 
     if (current.customerId) {
@@ -514,7 +660,7 @@ app.put('/me', requireAuth, async (req, res) => {
         `);
     }
 
-    const row = await findUserById(transaction, req.user.sub);
+    const row = await findAccountById(transaction, accountSource, req.user.sub);
     await transaction.commit();
     const user = serializeUser(row);
     setSessionCookie(res, user);
@@ -537,7 +683,7 @@ app.put('/me/payment-method', requireCustomer, async (req, res) => {
   const transaction = new sql.Transaction(pool);
   try {
     await transaction.begin();
-    const user = serializeUser(await findUserById(transaction, req.user.sub));
+    const user = serializeUser(await findAccountById(transaction, req.user.accountSource, req.user.sub));
     if (!user) throw createHttpError(404, 'Account not found');
     const customerId = await ensureCustomerForUser(transaction, user);
     const last4 = cardDigits.slice(-4);
@@ -699,7 +845,7 @@ app.post('/orders', requireCustomer, async (req, res) => {
   const transaction = new sql.Transaction(pool);
   try {
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-    const user = serializeUser(await findUserById(transaction, req.user.sub));
+    const user = serializeUser(await findAccountById(transaction, req.user.accountSource, req.user.sub));
     if (!user) throw createHttpError(401, 'Account no longer exists');
     const customerId = await ensureCustomerForUser(transaction, user, address);
     const createdAt = new Date();
@@ -776,7 +922,7 @@ app.post('/orders', requireCustomer, async (req, res) => {
 app.get('/orders', requireCustomer, async (req, res) => {
   try {
     const pool = await applicationPoolPromise;
-    const user = serializeUser(await findUserById(pool, req.user.sub));
+    const user = serializeUser(await findAccountById(pool, req.user.accountSource, req.user.sub));
     if (!user) return res.status(401).json({ error: 'Account no longer exists' });
     const customerId = user.customerId;
     return res.json({ orders: await loadOrders(pool, customerId) });
@@ -792,7 +938,7 @@ app.get('/orders/:orderId', requireCustomer, async (req, res) => {
 
   try {
     const pool = await applicationPoolPromise;
-    const user = serializeUser(await findUserById(pool, req.user.sub));
+    const user = serializeUser(await findAccountById(pool, req.user.accountSource, req.user.sub));
     if (!user) return res.status(401).json({ error: 'Account no longer exists' });
     const orders = await loadOrders(pool, user.customerId, orderId);
     if (!orders.length) return res.status(404).json({ error: 'Order not found' });
@@ -806,7 +952,7 @@ app.get('/orders/:orderId', requireCustomer, async (req, res) => {
 app.get('/library', requireCustomer, async (req, res) => {
   try {
     const pool = await applicationPoolPromise;
-    const user = serializeUser(await findUserById(pool, req.user.sub));
+    const user = serializeUser(await findAccountById(pool, req.user.accountSource, req.user.sub));
     if (!user) return res.status(401).json({ error: 'Account no longer exists' });
     const orders = await loadOrders(pool, user.customerId);
     const products = new Map();
@@ -836,7 +982,7 @@ app.get('/admin/summary', requireAdmin, async (req, res) => {
     const result = await pool.request().query(`
       SELECT
         (SELECT COUNT(*) FROM dbo.Product) AS productCount,
-        (SELECT COUNT(*) FROM dbo.[User]) AS userCount,
+        ((SELECT COUNT(*) FROM dbo.[User]) + (SELECT COUNT(*) FROM dbo.Patrons)) AS userCount,
         (SELECT COUNT(*) FROM dbo.Orders) AS orderCount,
         (SELECT COUNT(*) FROM dbo.Stocktake WHERE Quantity <= 5) AS lowStockCount
     `);
@@ -896,7 +1042,8 @@ async function listStoreUsers(pool) {
         WHEN customer.customerID IS NOT NULL THEN N'Customer'
         ELSE N'Employee'
       END AS role,
-      customer.customerID AS customerId
+      customer.customerID AS customerId,
+      N'user' AS accountSource
     FROM dbo.[User] users
     OUTER APPLY (
       SELECT TOP 1 account.customerID
@@ -904,7 +1051,32 @@ async function listStoreUsers(pool) {
       WHERE users.Email IS NOT NULL AND LOWER(account.Email) = LOWER(users.Email)
       ORDER BY account.customerID
     ) customer
-    ORDER BY users.UserID
+
+    UNION ALL
+
+    SELECT
+      patron.UserID AS id,
+      patron.Email AS username,
+      patron.Email AS email,
+      patron.Name AS name,
+      CAST(0 AS bit) AS isAdmin,
+      N'Customer' AS role,
+      customer.customerID AS customerId,
+      N'patron' AS accountSource
+    FROM dbo.Patrons patron
+    OUTER APPLY (
+      SELECT TOP 1 account.customerID
+      FROM dbo.[TO] account
+      WHERE account.PatronId = patron.UserID
+        OR (
+          account.PatronId IS NULL
+          AND patron.Email IS NOT NULL
+          AND LOWER(account.Email) = LOWER(patron.Email)
+        )
+      ORDER BY CASE WHEN account.PatronId = patron.UserID THEN 0 ELSE 1 END, account.customerID
+    ) customer
+
+    ORDER BY accountSource, id
   `);
 
   return result.recordset.map((user) => ({
@@ -912,6 +1084,8 @@ async function listStoreUsers(pool) {
     isAdmin: Boolean(user.isAdmin),
     role: normalizeRole(user.role, user.isAdmin ? 'Admin' : 'Customer'),
     customerId: toPositiveInt(user.customerId),
+    accountSource: normalizeAccountSource(user.accountSource),
+    accountKey: accountKey(user.accountSource, user.id),
   }));
 }
 
@@ -921,7 +1095,7 @@ app.get('/staff/summary', requireStaff, async (req, res) => {
     const result = await pool.request().query(`
       SELECT
         (SELECT COUNT(*) FROM dbo.Product) AS productCount,
-        (SELECT COUNT(*) FROM dbo.[User]) AS userCount,
+        ((SELECT COUNT(*) FROM dbo.[User]) + (SELECT COUNT(*) FROM dbo.Patrons)) AS userCount,
         (SELECT COUNT(*) FROM dbo.Orders) AS orderCount,
         (SELECT COUNT(*) FROM dbo.Stocktake WHERE Quantity <= 5) AS lowStockCount
     `);
@@ -1148,7 +1322,7 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
   const transaction = new sql.Transaction(pool);
   try {
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-    const user = serializeUser(await createUser(transaction, req.body || {}, true));
+    const user = serializeUser(await createAccount(transaction, req.body || {}, true));
     await transaction.commit();
     return res.status(201).json({ user });
   } catch (error) {
@@ -1157,40 +1331,18 @@ app.post('/admin/users', requireAdmin, async (req, res) => {
   }
 });
 
-async function removeCustomerRecordForEmployee(transaction, email) {
-  const customer = await new sql.Request(transaction)
-    .input('email', sql.NVarChar(255), email)
-    .query(`
-      SELECT TOP 1
-        account.customerID,
-        (SELECT COUNT(*) FROM dbo.Orders orders WHERE orders.customer = account.customerID) AS orderCount
-      FROM dbo.[TO] account
-      WHERE LOWER(account.Email) = LOWER(@email)
-      ORDER BY account.customerID
-    `);
-
-  const record = customer.recordset?.[0];
-  if (!record) return;
-  if (Number(record.orderCount) > 0) {
-    throw createHttpError(409, 'A customer with order history cannot be converted to Employee. Create a separate Employee account instead.');
-  }
-
-  await new sql.Request(transaction)
-    .input('customerId', sql.Int, record.customerID)
-    .query('DELETE FROM dbo.[TO] WHERE customerID = @customerId');
-}
-
-app.put('/admin/users/:userId', requireAdmin, async (req, res) => {
-  const userId = toPositiveInt(req.params.userId);
+app.put('/admin/users/:accountReference', requireAdmin, async (req, res) => {
+  const accountReference = parseAccountReference(req.params.accountReference);
   const name = cleanText(req.body?.name, 255);
   const email = cleanText(req.body?.email, 255)?.toLowerCase();
   const requestedRole = req.body?.role || (req.body?.isAdmin ? 'Admin' : 'Customer');
   const role = normalizeRole(requestedRole, null);
-  const isAdmin = role === 'Admin';
-  if (!userId || !name || !email || !role || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!accountReference || !name || !email || !role || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Valid user fields are required' });
   }
-  if (Number(req.user.sub) === userId && role !== 'Admin') {
+  const isSelf = req.user.accountSource === accountReference.accountSource
+    && Number(req.user.sub) === accountReference.id;
+  if (isSelf && role !== 'Admin') {
     return res.status(400).json({ error: 'You cannot remove your own admin access' });
   }
 
@@ -1198,32 +1350,63 @@ app.put('/admin/users/:userId', requireAdmin, async (req, res) => {
   const transaction = new sql.Transaction(pool);
   try {
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-    const current = await findUserById(transaction, userId);
+    const current = await findAccountById(
+      transaction,
+      accountReference.accountSource,
+      accountReference.id,
+    );
     if (!current) throw createHttpError(404, 'User not found');
-    const duplicate = await new sql.Request(transaction)
-      .input('userId', sql.Int, userId)
-      .input('email', sql.NVarChar(255), email)
-      .query('SELECT UserID FROM dbo.[User] WHERE UserID <> @userId AND LOWER(Email) = LOWER(@email)');
-    if (duplicate.recordset?.length) throw createHttpError(409, 'Email is already registered');
+    const currentRole = normalizeRole(current.accessRole, current.isAdmin ? 'Admin' : 'Customer');
+    const customerModel = accountReference.accountSource === 'patron' || currentRole === 'Customer';
+    if (customerModel && role !== 'Customer') {
+      throw createHttpError(400, 'Customer accounts must remain in the Patrons customer model. Create a separate staff account instead.');
+    }
+    if (!customerModel && role === 'Customer') {
+      throw createHttpError(400, 'Staff accounts cannot be converted to customers. Create a separate customer account instead.');
+    }
+    if (await findDuplicateAccount(transaction, {
+      email,
+      excludeSource: accountReference.accountSource,
+      excludeId: accountReference.id,
+    })) {
+      throw createHttpError(409, 'Email is already registered');
+    }
 
-    await new sql.Request(transaction)
-      .input('userId', sql.Int, userId)
-      .input('name', sql.NVarChar(255), name)
-      .input('email', sql.NVarChar(255), email)
-      .input('isAdmin', sql.Bit, isAdmin)
-      .query('UPDATE dbo.[User] SET Name = @name, Email = @email, isAdmin = @isAdmin WHERE UserID = @userId');
-    if (current.email) {
+    if (accountReference.accountSource === 'patron') {
       await new sql.Request(transaction)
-        .input('oldEmail', sql.NVarChar(255), current.email)
+        .input('patronId', sql.Int, accountReference.id)
+        .input('name', sql.NVarChar(255), name)
         .input('email', sql.NVarChar(255), email)
-        .query('UPDATE dbo.[TO] SET Email = @email WHERE LOWER(Email) = LOWER(@oldEmail)');
+        .query('UPDATE dbo.Patrons SET Name = @name, Email = @email WHERE UserID = @patronId');
+      await new sql.Request(transaction)
+        .input('patronId', sql.Int, accountReference.id)
+        .input('customerId', sql.Int, current.customerId)
+        .input('email', sql.NVarChar(255), email)
+        .query(`
+          UPDATE dbo.[TO]
+          SET Email = @email
+          WHERE PatronId = @patronId OR customerID = @customerId
+        `);
+    } else {
+      await new sql.Request(transaction)
+        .input('userId', sql.Int, accountReference.id)
+        .input('name', sql.NVarChar(255), name)
+        .input('email', sql.NVarChar(255), email)
+        .input('isAdmin', sql.Bit, role === 'Admin')
+        .query('UPDATE dbo.[User] SET Name = @name, Email = @email, isAdmin = @isAdmin WHERE UserID = @userId');
+      if (currentRole === 'Customer' && current.email) {
+        await new sql.Request(transaction)
+          .input('oldEmail', sql.NVarChar(255), current.email)
+          .input('email', sql.NVarChar(255), email)
+          .query('UPDATE dbo.[TO] SET Email = @email WHERE LOWER(Email) = LOWER(@oldEmail)');
+      }
     }
-    if (role === 'Customer') {
-      await ensureCustomerForUser(transaction, { id: userId, email }, {});
-    } else if (role === 'Employee') {
-      await removeCustomerRecordForEmployee(transaction, email);
-    }
-    const user = serializeUser(await findUserById(transaction, userId));
+
+    const user = serializeUser(await findAccountById(
+      transaction,
+      accountReference.accountSource,
+      accountReference.id,
+    ));
     await transaction.commit();
     return res.json({ user });
   } catch (error) {
@@ -1232,17 +1415,66 @@ app.put('/admin/users/:userId', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/admin/users/:userId', requireAdmin, async (req, res) => {
-  const userId = toPositiveInt(req.params.userId);
-  if (!userId) return res.status(400).json({ error: 'Valid user id is required' });
-  if (Number(req.user.sub) === userId) return res.status(400).json({ error: 'You cannot delete your own account' });
+app.delete('/admin/users/:accountReference', requireAdmin, async (req, res) => {
+  const accountReference = parseAccountReference(req.params.accountReference);
+  if (!accountReference) return res.status(400).json({ error: 'Valid account reference is required' });
+  if (
+    req.user.accountSource === accountReference.accountSource
+    && Number(req.user.sub) === accountReference.id
+  ) {
+    return res.status(400).json({ error: 'You cannot delete your own account' });
+  }
 
   const pool = await applicationPoolPromise;
   const transaction = new sql.Transaction(pool);
   try {
     await transaction.begin(sql.ISOLATION_LEVEL.SERIALIZABLE);
-    const user = await findUserById(transaction, userId);
+    const user = await findAccountById(
+      transaction,
+      accountReference.accountSource,
+      accountReference.id,
+    );
     if (!user) throw createHttpError(404, 'User not found');
+
+    if (accountReference.accountSource === 'patron') {
+      const references = await new sql.Request(transaction)
+        .input('patronId', sql.Int, accountReference.id)
+        .input('customerId', sql.Int, user.customerId)
+        .input('email', sql.NVarChar(255), user.email)
+        .query(`
+          SELECT COUNT(*) AS orderReferences
+          FROM dbo.Orders orders
+          JOIN dbo.[TO] customer ON customer.customerID = orders.customer
+          WHERE customer.PatronId = @patronId
+             OR customer.customerID = @customerId
+             OR (
+               customer.PatronId IS NULL
+               AND LOWER(customer.Email) = LOWER(@email)
+             )
+        `);
+      if (Number(references.recordset[0].orderReferences) > 0) {
+        throw createHttpError(409, 'Customer cannot be deleted because order history is linked to this account');
+      }
+
+      await new sql.Request(transaction)
+        .input('patronId', sql.Int, accountReference.id)
+        .input('customerId', sql.Int, user.customerId)
+        .input('email', sql.NVarChar(255), user.email)
+        .query(`
+          DELETE FROM dbo.[TO]
+          WHERE PatronId = @patronId
+             OR customerID = @customerId
+             OR (
+               PatronId IS NULL
+               AND LOWER(Email) = LOWER(@email)
+             )
+        `);
+      await new sql.Request(transaction)
+        .input('patronId', sql.Int, accountReference.id)
+        .query('DELETE FROM dbo.Patrons WHERE UserID = @patronId');
+      await transaction.commit();
+      return res.json({ ok: true });
+    }
 
     const references = await new sql.Request(transaction)
       .input('username', sql.NVarChar(50), user.username)
@@ -1270,7 +1502,7 @@ app.delete('/admin/users/:userId', requireAdmin, async (req, res) => {
       .input('email', sql.NVarChar(255), user.email)
       .query('DELETE FROM dbo.[TO] WHERE LOWER(Email) = LOWER(@email)');
     await new sql.Request(transaction)
-      .input('userId', sql.Int, userId)
+      .input('userId', sql.Int, accountReference.id)
       .query('DELETE FROM dbo.[User] WHERE UserID = @userId');
     await transaction.commit();
     return res.json({ ok: true });
