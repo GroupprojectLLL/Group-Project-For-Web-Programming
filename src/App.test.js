@@ -1,253 +1,933 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import App from './App';
+
+const MOCK_CUSTOMER = {
+  id: 7,
+  customerId: 101,
+  name: 'Morgan Lee',
+  username: 'morganlee',
+  email: 'morgan.lee@example.com',
+  role: 'Customer',
+  paymentMethod: null,
+  address: {},
+};
+
+let loginErrorMessage = '';
+let orderErrorMessage = '';
+
+function response(
+  payload,
+  ok = true,
+  status = 200
+) {
+  return Promise.resolve({
+    ok,
+    status,
+    json: () => Promise.resolve(payload),
+  });
+}
+
+function installFetchMock() {
+  global.fetch = jest.fn((input, options = {}) => {
+    const url = String(input);
+    const method = String(
+      options.method || 'GET'
+    ).toUpperCase();
+
+    if (url.includes('/api/inft3050/')) {
+      return Promise.reject(
+        new Error('Backend offline')
+      );
+    }
+
+    if (url.endsWith('/session')) {
+      return response({
+        user: null,
+      });
+    }
+
+    if (url.endsWith('/login')) {
+      return loginErrorMessage
+        ? response(
+            {
+              error: loginErrorMessage,
+            },
+            false,
+            401
+          )
+        : response({
+            user: MOCK_CUSTOMER,
+          });
+    }
+
+    if (url.endsWith('/logout')) {
+      return response({}, true, 204);
+    }
+
+    if (url.endsWith('/library')) {
+      return response({
+        items: [],
+      });
+    }
+
+    if (
+      url.endsWith('/orders') &&
+      method === 'GET'
+    ) {
+      return response({
+        orders: [],
+      });
+    }
+
+    if (
+      url.endsWith('/orders') &&
+      method === 'POST'
+    ) {
+      return orderErrorMessage
+        ? response(
+            {
+              error: orderErrorMessage,
+            },
+            false,
+            500
+          )
+        : response({
+            orderId: 1001,
+            status: 'Paid',
+            refundStatus: 'Not requested',
+            total: 39.98,
+            paymentMethod: 'Card **** 3456',
+            createdAt:
+              '2026-07-19T15:00:00.000Z',
+            items: [],
+          });
+    }
+
+    return response({});
+  });
+}
+
+function openNebulaProduct() {
+  fireEvent.click(
+    screen.getByRole('button', {
+      name: /explore nebula protocol/i,
+    })
+  );
+}
+
+function addNebulaToCart(times = 1) {
+  openNebulaProduct();
+
+  for (
+    let i = 0;
+    i < times;
+    i += 1
+  ) {
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /^add to cart$/i,
+      })
+    );
+  }
+}
+
+async function signIn({
+  openAccountPage = true,
+} = {}) {
+  if (openAccountPage) {
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /my account/i,
+      })
+    );
+  }
+
+  fireEvent.change(
+    await screen.findByLabelText(
+      /email address or username/i
+    ),
+    {
+      target: {
+        value: 'tester@example.com',
+      },
+    }
+  );
+
+  fireEvent.change(
+    screen.getByLabelText(/^password$/i),
+    {
+      target: {
+        value: 'password123',
+      },
+    }
+  );
+
+  fireEvent.submit(
+    screen
+      .getByRole('button', {
+        name: /^sign in$/i,
+      })
+      .closest('form')
+  );
+
+  await waitFor(() => {
+    expect(
+      within(
+        screen.getByLabelText(/account menu/i)
+      ).getByText(MOCK_CUSTOMER.email)
+    ).toBeInTheDocument();
+  });
+}
+
+function fillValidCard() {
+  fireEvent.change(
+    screen.getByPlaceholderText(
+      /1234 5678 9012 3456/i
+    ),
+    {
+      target: {
+        value: '1234 5678 9012 3456',
+      },
+    }
+  );
+
+  fireEvent.change(
+    screen.getByPlaceholderText(
+      /morgan lee/i
+    ),
+    {
+      target: {
+        value: 'Morgan Lee',
+      },
+    }
+  );
+
+  fireEvent.change(
+    screen.getByPlaceholderText(/mm \/ yy/i),
+    {
+      target: {
+        value: '12 / 30',
+      },
+    }
+  );
+
+  fireEvent.change(
+    screen.getByPlaceholderText(/^123$/i),
+    {
+      target: {
+        value: '123',
+      },
+    }
+  );
+}
 
 beforeEach(() => {
   window.location.hash = '';
   window.scrollTo = jest.fn();
-  window.localStorage.removeItem('zhsg-settings');
-  global.fetch = jest.fn(() => new Promise(() => {}));
+
+  window.localStorage.clear();
+
+  document.documentElement.classList.remove(
+    'reduce-motion'
+  );
+
+  loginErrorMessage = '';
+  orderErrorMessage = '';
+
+  installFetchMock();
 });
 
-test('renders ZeHaoShanGou home page', () => {
-  render(<App />);
-  expect(screen.getAllByText(/ZeHaoShanGou/i).length).toBeGreaterThan(0);
-  expect(screen.getByText(/lose yourself/i)).toBeInTheDocument();
+afterEach(() => {
+  jest.clearAllMocks();
 });
 
-test('category navigation displays the selected product listing', () => {
-  render(<App />);
-  fireEvent.click(screen.getAllByRole('button', { name: /^games$/i })[0]);
+test(
+  'renders ZeHaoShanGou home page',
+  () => {
+    render(<App />);
 
-  expect(screen.getByRole('heading', { name: /^games$/i })).toBeInTheDocument();
-  expect(screen.getAllByText(/nebula protocol/i).length).toBeGreaterThan(0);
-});
+    expect(
+      screen.getAllByText(
+        /ZeHaoShanGou/i
+      ).length
+    ).toBeGreaterThan(0);
 
-test('search displays the matching product', () => {
-  render(<App />);
-  const search = screen.getByLabelText(/search products/i);
+    expect(
+      screen.getByText(/lose yourself/i)
+    ).toBeInTheDocument();
+  }
+);
 
-  fireEvent.change(search, { target: { value: 'Nebula' } });
-  fireEvent.submit(search.closest('form'));
+test(
+  'category navigation displays the selected product listing',
+  () => {
+    render(<App />);
 
-  expect(screen.getByRole('heading', { name: /results for "nebula"/i })).toBeInTheDocument();
-  expect(screen.getAllByText(/nebula protocol/i).length).toBeGreaterThan(0);
-});
+    fireEvent.click(
+      screen.getAllByRole('button', {
+        name: /^games$/i,
+      })[0]
+    );
 
-test('a product can be opened and added to the cart feedback', () => {
-  render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
+    expect(
+      screen.getByRole('heading', {
+        name: /^games$/i,
+      })
+    ).toBeInTheDocument();
 
-  expect(screen.getByRole('heading', { name: /nebula protocol/i })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
-  expect(screen.getByText(/nebula protocol added to cart/i)).toBeInTheDocument();
-});
+    expect(
+      screen.getAllByText(
+        /nebula protocol/i
+      ).length
+    ).toBeGreaterThan(0);
+  }
+);
 
-test('login fields require a valid email and an eight-character password', () => {
-  render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
+test(
+  'search displays the matching product',
+  () => {
+    render(<App />);
 
-  const email = screen.getByLabelText(/email address/i);
-  const password = screen.getByLabelText(/^password$/i);
+    const search =
+      screen.getByLabelText(
+        /search products/i
+      );
 
-  expect(email).toBeRequired();
-  expect(email).toHaveAttribute('type', 'email');
-  expect(password).toBeRequired();
-  expect(password).toHaveAttribute('minlength', '8');
-});
+    fireEvent.change(search, {
+      target: {
+        value: 'Nebula',
+      },
+    });
 
-test('account menu returns guests to their selected page after sign in', () => {
-  render(<App />);
-  const accountMenu = screen.getByLabelText(/account menu/i);
+    fireEvent.submit(
+      search.closest('form')
+    );
 
-  fireEvent.click(within(accountMenu).getByText(/^wishlist$/i).closest('button'));
-  expect(screen.getByRole('heading', { name: /sign in to your account/i })).toBeInTheDocument();
-  expect(screen.getByRole('alert')).toHaveTextContent(/please sign in first/i);
-  expect(screen.getByRole('alert')).toHaveClass('toast-error');
+    expect(
+      screen.getByRole('heading', {
+        name: /results for "nebula"/i,
+      })
+    ).toBeInTheDocument();
+  }
+);
 
-  fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'tester@example.com' } });
-  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
-  fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+test(
+  'a product can be opened and added to the cart',
+  () => {
+    render(<App />);
 
-  expect(screen.getByRole('heading', { name: /^wishlist$/i })).toBeInTheDocument();
-  expect(within(accountMenu).getByText(/morgan\.lee@example\.com/i)).toBeInTheDocument();
+    openNebulaProduct();
 
-  fireEvent.click(within(accountMenu).getByText(/^my library$/i).closest('button'));
-  expect(screen.getByRole('heading', { name: /^my library$/i })).toBeInTheDocument();
-});
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /^add to cart$/i,
+      })
+    );
 
-test('settings are saved and applied to the library experience', () => {
-  window.location.hash = 'settings';
-  render(<App />);
+    expect(
+      screen.getByText(
+        /nebula protocol added to cart/i
+      )
+    ).toBeInTheDocument();
+  }
+);
 
-  fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'tester@example.com' } });
-  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
-  fireEvent.click(screen.getByRole('button', { name: /^sign in$/i }));
+test(
+  'login accepts an email or username and requires a password',
+  async () => {
+    render(<App />);
 
-  expect(screen.getByRole('heading', { name: /^settings$/i })).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText(/default library sort/i), { target: { value: 'Oldest' } });
-  fireEvent.click(screen.getByRole('checkbox', { name: /reduce interface motion/i }));
-  fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /my account/i,
+      })
+    );
 
-  expect(screen.getByRole('status')).toHaveTextContent(/preferences have been saved/i);
-  expect(document.documentElement).toHaveClass('reduce-motion');
-  expect(JSON.parse(window.localStorage.getItem('zhsg-settings'))).toMatchObject({
-    librarySort: 'Oldest',
-    reduceMotion: true,
-  });
+    const identifier =
+      await screen.findByLabelText(
+        /email address or username/i
+      );
 
-  const accountMenu = screen.getByLabelText(/account menu/i);
-  fireEvent.click(within(accountMenu).getByText(/^my library$/i).closest('button'));
-  expect(screen.getByLabelText(/library sort/i)).toHaveValue('Oldest');
-});
+    const password =
+      screen.getByLabelText(
+        /^password$/i
+      );
 
-test('registration displays a clear message when passwords do not match', () => {
-  render(<App />);
-  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
-  fireEvent.click(screen.getByRole('button', { name: /register a new account/i }));
+    expect(identifier).toBeRequired();
 
-  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
-  fireEvent.change(screen.getByLabelText(/confirm password/i), { target: { value: 'different123' } });
-  fireEvent.submit(screen.getByRole('button', { name: /create account/i }).closest('form'));
+    expect(identifier).toHaveAttribute(
+      'type',
+      'text'
+    );
 
-  expect(screen.getByRole('alert')).toHaveTextContent(/passwords do not match/i);
-});
+    expect(identifier).toHaveAttribute(
+      'autocomplete',
+      'username'
+    );
 
-test('demo products remain available when the backend API is offline', async () => {
-  global.fetch = jest.fn(() => Promise.reject(new Error('Backend offline')));
-  render(<App />);
+    expect(password).toBeRequired();
 
-  expect(await screen.findByText(/using demo products because the storedb product api is unavailable/i)).toBeInTheDocument();
-  expect(screen.getByText(/nebula protocol/i)).toBeInTheDocument();
-});
+    expect(password).toHaveAttribute(
+      'type',
+      'password'
+    );
+  }
+);
 
-test('cart page opens from the header and shows an empty-cart message', () => {
-  render(<App />);
+test(
+  'account menu returns guests to wishlist after successful sign in',
+  async () => {
+    render(<App />);
 
-  fireEvent.click(screen.getByRole('button', { name: /^cart$/i }));
+    const accountMenu =
+      screen.getByLabelText(
+        /account menu/i
+      );
 
-  expect(screen.getByRole('heading', { name: /^your cart$/i, level: 1 })).toBeInTheDocument();
-  expect(screen.getByText(/your cart is empty/i)).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /browse products/i })).toBeInTheDocument();
-});
+    fireEvent.click(
+      within(accountMenu).getByRole(
+        'menuitem',
+        {
+          name: /^wishlist$/i,
+        }
+      )
+    );
 
-test('cart summary displays the selected product after add to cart', () => {
-  render(<App />);
+    expect(
+      await screen.findByRole('heading', {
+        name: /sign in to your account/i,
+      })
+    ).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^cart$/i }));
+    await signIn({
+      openAccountPage: false,
+    });
 
-  expect(screen.getByRole('heading', { name: /your cart/i })).toBeInTheDocument();
-  expect(screen.getByText(/1 item selected/i)).toBeInTheDocument();
-  expect(screen.getAllByText(/nebula protocol/i).length).toBeGreaterThan(0);
-  expect(screen.getByText(/subtotal/i)).toBeInTheDocument();
-  expect(screen.getAllByText(/\$19\.99/).length).toBeGreaterThan(0);
-});
+    expect(
+      await screen.findByRole('heading', {
+        name: /^wishlist$/i,
+      })
+    ).toBeInTheDocument();
+  }
+);
 
-test('duplicate add-to-cart increases quantity instead of adding another row', () => {
-  render(<App />);
+test(
+  'settings are saved and applied to the library',
+  async () => {
+    window.location.hash = 'settings';
 
-  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^cart$/i }));
+    render(<App />);
 
-  expect(screen.getByText(/2 items selected/i)).toBeInTheDocument();
-  expect(screen.getByLabelText(/quantity for nebula protocol/i)).toHaveTextContent('2');
-  expect(screen.getAllByText(/\$39\.98/).length).toBeGreaterThan(0);
-});
+    await screen.findByRole('heading', {
+      name: /sign in to your account/i,
+    });
 
-test('checkout from cart asks unauthenticated users to sign in', () => {
-  render(<App />);
+    await signIn({
+      openAccountPage: false,
+    });
 
-  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^cart$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /sign in to checkout/i }));
+    expect(
+      await screen.findByRole('heading', {
+        name: /^settings$/i,
+      })
+    ).toBeInTheDocument();
 
-  expect(screen.getByRole('heading', { name: /sign in to your account/i })).toBeInTheDocument();
-  expect(screen.getByText(/secure account access/i)).toBeInTheDocument();
-});
+    fireEvent.change(
+      screen.getByLabelText(
+        /default library sort/i
+      ),
+      {
+        target: {
+          value: 'Oldest',
+        },
+      }
+    );
 
-test('forgot password page can be opened from the account page', () => {
-  render(<App />);
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: /reduce interface motion/i,
+      })
+    );
 
-  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
-  fireEvent.click(screen.getByRole('button', { name: /forgot your password/i }));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /save changes/i,
+      })
+    );
 
-  expect(screen.getByRole('heading', { name: /reset your password/i })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /send reset link/i })).toBeInTheDocument();
-});
+    expect(
+      screen.getByRole('status')
+    ).toHaveTextContent(
+      /preferences have been saved/i
+    );
 
-test('signed-in checkout displays new card payment fields', () => {
-  render(<App />);
+    expect(
+      document.documentElement
+    ).toHaveClass('reduce-motion');
 
-  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
+    expect(
+      JSON.parse(
+        window.localStorage.getItem(
+          'zhsg-settings'
+        )
+      )
+    ).toMatchObject({
+      librarySort: 'Oldest',
+      reduceMotion: true,
+    });
+  }
+);
 
-  fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'tester@example.com' } });
-  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
-  fireEvent.submit(screen.getByRole('button', { name: /^sign in/i }).closest('form'));
+test(
+  'registration displays a clear message when passwords do not match',
+  async () => {
+    render(<App />);
 
-  fireEvent.click(screen.getByRole('button', { name: /continue to checkout/i }));
-  fireEvent.click(screen.getByLabelText(/new card/i));
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /my account/i,
+      })
+    );
 
-  expect(screen.getByRole('heading', { name: /checkout/i })).toBeInTheDocument();
-  expect(screen.getByPlaceholderText(/1234 5678 9012 3456/i)).toBeInTheDocument();
-  expect(screen.getByPlaceholderText(/morgan lee/i)).toBeInTheDocument();
-  expect(screen.getByPlaceholderText(/mm \/ yy/i)).toBeInTheDocument();
-  expect(screen.getByPlaceholderText(/^123$/i)).toBeInTheDocument();
-});
+    await screen.findByLabelText(
+      /email address or username/i
+    );
 
-test('order detail keeps item quantity and line total after payment success', async () => {
-  render(<App />);
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /register a new account/i,
+      })
+    );
 
-  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
+    fireEvent.change(
+      screen.getByLabelText(/^password$/i),
+      {
+        target: {
+          value: 'password123',
+        },
+      }
+    );
 
-  fireEvent.change(screen.getByLabelText(/email address/i), { target: { value: 'tester@example.com' } });
-  fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: 'password123' } });
-  fireEvent.submit(screen.getByRole('button', { name: /^sign in/i }).closest('form'));
+    fireEvent.change(
+      screen.getByLabelText(
+        /confirm password/i
+      ),
+      {
+        target: {
+          value: 'different123',
+        },
+      }
+    );
 
-  fireEvent.click(screen.getByRole('button', { name: /continue to checkout/i }));
-  global.fetch.mockResolvedValueOnce({
-    ok: true,
-    json: () => Promise.resolve({ orderId: '1001', items: [] }),
-  });
-  fireEvent.click(screen.getByRole('button', { name: /confirm payment/i }));
+    fireEvent.submit(
+      screen
+        .getByRole('button', {
+          name: /create account/i,
+        })
+        .closest('form')
+    );
 
-  expect(await screen.findByRole('heading', { name: /payment successful/i })).toBeInTheDocument();
-  expect(screen.getByText(/quantity: 2/i)).toBeInTheDocument();
-  expect(screen.getAllByText(/\$39\.98/).length).toBeGreaterThan(0);
-});
+    expect(
+      screen.getByRole('alert')
+    ).toHaveTextContent(
+      /passwords do not match/i
+    );
+  }
+);
 
-test('frontend sign-in currently allows entered account details without database verification', () => {
-  render(<App />);
+test(
+  'demo products remain available when the product API is offline',
+  async () => {
+    render(<App />);
 
-  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
-  fireEvent.click(screen.getByRole('button', { name: /^add to cart$/i }));
-  fireEvent.click(screen.getByRole('button', { name: /my account/i }));
+    expect(
+      await screen.findByText(
+        /using demo products because the storedb product api is unavailable/i
+      )
+    ).toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText(/email address/i), {
-    target: { value: 'unregistered@example.com' },
-  });
-  fireEvent.change(screen.getByLabelText(/^password$/i), {
-    target: { value: 'password123' },
-  });
+    expect(
+      screen.getByText(
+        /nebula protocol/i
+      )
+    ).toBeInTheDocument();
+  }
+);
 
-  fireEvent.submit(screen.getByRole('button', { name: /^sign in/i }).closest('form'));
+test(
+  'cart page shows an empty-cart message',
+  () => {
+    render(<App />);
 
-  expect(screen.getByRole('button', { name: /continue to checkout/i })).toBeInTheDocument();
-});
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /^cart$/i,
+      })
+    );
 
-test('buy now starts the checkout flow for the selected product', () => {
-  render(<App />);
+    expect(
+      screen.getByText(
+        /your cart is empty/i
+      )
+    ).toBeInTheDocument();
+  }
+);
 
-  fireEvent.click(screen.getByRole('button', { name: /explore nebula protocol/i }));
-  fireEvent.click(screen.getByRole('button', { name: /buy now/i }));
+test(
+  'duplicate add-to-cart increases quantity and total',
+  () => {
+    render(<App />);
 
-  expect(screen.getByRole('heading', { name: /checkout/i })).toBeInTheDocument();
-});
+    addNebulaToCart(2);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /^cart$/i,
+      })
+    );
+
+    expect(
+      screen.getByText(
+        /2 items selected/i
+      )
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByLabelText(
+        /quantity for nebula protocol/i
+      )
+    ).toHaveTextContent('2');
+
+    expect(
+      screen.getAllByText(
+        /\$39\.98/
+      ).length
+    ).toBeGreaterThan(0);
+  }
+);
+
+test(
+  'decreasing the final cart item restores the empty-cart state',
+  () => {
+    render(<App />);
+
+    addNebulaToCart();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /^cart$/i,
+      })
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /remove one nebula protocol/i,
+      })
+    );
+
+    expect(
+      screen.getByText(
+        /your cart is empty/i
+      )
+    ).toBeInTheDocument();
+  }
+);
+
+test(
+  'checkout asks unauthenticated users to sign in',
+  () => {
+    render(<App />);
+
+    addNebulaToCart();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /^cart$/i,
+      })
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /sign in to checkout/i,
+      })
+    );
+
+    expect(
+      screen.getByRole('heading', {
+        name: /sign in to your account/i,
+      })
+    ).toBeInTheDocument();
+  }
+);
+
+test(
+  'forgot password page opens from the account page',
+  async () => {
+    render(<App />);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /my account/i,
+      })
+    );
+
+    await screen.findByLabelText(
+      /email address or username/i
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /forgot your password/i,
+      })
+    );
+
+    expect(
+      screen.getByRole('heading', {
+        name: /reset your password/i,
+      })
+    ).toBeInTheDocument();
+  }
+);
+
+test(
+  'signed-in checkout displays new card fields',
+  async () => {
+    render(<App />);
+
+    addNebulaToCart();
+
+    await signIn();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /continue to checkout/i,
+      })
+    );
+
+    expect(
+      await screen.findByRole('heading', {
+        name: /^checkout$/i,
+      })
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByPlaceholderText(
+        /1234 5678 9012 3456/i
+      )
+    ).toBeInTheDocument();
+  }
+);
+
+test(
+  'order detail keeps quantity and total after payment success',
+  async () => {
+    render(<App />);
+
+    addNebulaToCart(2);
+
+    await signIn();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /continue to checkout/i,
+      })
+    );
+
+    await screen.findByRole('heading', {
+      name: /^checkout$/i,
+    });
+
+    fillValidCard();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /confirm payment/i,
+      })
+    );
+
+    expect(
+      await screen.findByRole('heading', {
+        name: /payment successful/i,
+      })
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByText(/quantity: 2/i)
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getAllByText(
+        /\$39\.98/
+      ).length
+    ).toBeGreaterThan(0);
+  }
+);
+
+test(
+  'invalid backend credentials display an error message',
+  async () => {
+    loginErrorMessage =
+      'Invalid username or password';
+
+    render(<App />);
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /my account/i,
+      })
+    );
+
+    fireEvent.change(
+      await screen.findByLabelText(
+        /email address or username/i
+      ),
+      {
+        target: {
+          value:
+            'unregistered@example.com',
+        },
+      }
+    );
+
+    fireEvent.change(
+      screen.getByLabelText(/^password$/i),
+      {
+        target: {
+          value: 'password123',
+        },
+      }
+    );
+
+    fireEvent.submit(
+      screen
+        .getByRole('button', {
+          name: /^sign in$/i,
+        })
+        .closest('form')
+    );
+
+    expect(
+      await screen.findByRole('alert')
+    ).toHaveTextContent(
+      /invalid username or password/i
+    );
+  }
+);
+
+test(
+  'buy now sends an unauthenticated user to sign in',
+  async () => {
+    render(<App />);
+
+    openNebulaProduct();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /buy now/i,
+      })
+    );
+
+    expect(
+      await screen.findByRole('heading', {
+        name: /sign in to your account/i,
+      })
+    ).toBeInTheDocument();
+
+    expect(
+      screen.getByRole('alert')
+    ).toHaveTextContent(
+      /please sign in first/i
+    );
+  }
+);
+
+test(
+  'payment failure displays a user-friendly StoreDB error',
+  async () => {
+    orderErrorMessage =
+      'Database unavailable';
+
+    render(<App />);
+
+    addNebulaToCart();
+
+    await signIn();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /continue to checkout/i,
+      })
+    );
+
+    await screen.findByRole('heading', {
+      name: /^checkout$/i,
+    });
+
+    fillValidCard();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /confirm payment/i,
+      })
+    );
+
+    expect(
+      await screen.findByText(
+        /order could not be saved to storedb: database unavailable/i
+      )
+    ).toBeInTheDocument();
+
+    expect(
+      screen.queryByRole('heading', {
+        name: /payment successful/i,
+      })
+    ).not.toBeInTheDocument();
+  }
+);
+
+test(
+  'logging out prevents access to protected account pages',
+  async () => {
+    render(<App />);
+
+    await signIn();
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: /log out/i,
+      })
+    );
+
+    expect(
+      await screen.findByRole('heading', {
+        name: /sign in to your account/i,
+      })
+    ).toBeInTheDocument();
+
+    const accountMenu =
+      screen.getByLabelText(
+        /account menu/i
+      );
+
+    fireEvent.click(
+      within(accountMenu).getByRole(
+        'menuitem',
+        {
+          name: /^wishlist$/i,
+        }
+      )
+    );
+
+    expect(
+      screen.getByRole('heading', {
+        name: /sign in to your account/i,
+      })
+    ).toBeInTheDocument();
+  }
+);

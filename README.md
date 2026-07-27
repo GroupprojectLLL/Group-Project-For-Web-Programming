@@ -5,14 +5,22 @@ React prototype connected to the provided INFT3050 StoreDB through the backend s
 ## Run the project
 
 1. Put the course database files in `backend/db`. Database files are intentionally excluded from Git.
-2. Start the backend services:
+2. Create the private backend configuration and follow
+   [`backend/README.md`](backend/README.md) to set the StoreDB password, JWT
+   secret, and NocoDB token:
 
    ```powershell
    cd backend
+   Copy-Item .env.example .env
+   ```
+
+3. Start the backend services:
+
+   ```powershell
    docker compose up -d --build
    ```
 
-3. Start the React application in another PowerShell window:
+4. Start the React application in another PowerShell window:
 
    ```powershell
    cd ..
@@ -20,7 +28,7 @@ React prototype connected to the provided INFT3050 StoreDB through the backend s
    npm start
    ```
 
-4. Open `http://localhost:3000`.
+5. Open `http://localhost:3000`.
 
 The frontend expects the API at `http://localhost:3001`. To use another address, set `REACT_APP_API_BASE_URL` in a local `.env` file.
 

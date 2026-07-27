@@ -1,7 +1,7 @@
 services:
   noco:
     environment:
-      NC_DB: "mssql://host.docker.internal:1433?u=sa&p=inft3050_&d=master"
+      NC_DB: "mssql://db:1433?u=${MSSQL_USER:-sa}&p=${MSSQL_SA_PASSWORD}&d=master"
     image: nocodb/nocodb:0.98.1
     ports:
       - 8080:8080
@@ -13,14 +13,14 @@ services:
   db:
     environment:
       ACCEPT_EULA: "Y"
-      SA_PASSWORD: inft3050_
+      SA_PASSWORD: "${MSSQL_SA_PASSWORD}"
     image: mcr.microsoft.com/mssql/server:2022-latest
     platform: linux/amd64 
     restart: always
     volumes:
       - ./db/:/var/opt/mssql/data
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -l 10 -S tcp:127.0.0.1,1433 -U sa -P inft3050_ -d StoreDB -Q 'SELECT 1' || exit 1"]
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -l 10 -S tcp:127.0.0.1,1433 -U sa -P \"$$SA_PASSWORD\" -d StoreDB -Q 'SELECT 1' || exit 1"]
       interval: 10s
       retries: 10
       start_period: 10s
@@ -37,20 +37,20 @@ services:
         condition: service_started
     environment:
       # JWT / cookie
-      - NODE_ENV=development
-      - PORT=3001
-      - JWT_SECRET=change-me
-      - JWT_EXPIRES=3600
+      NODE_ENV: development
+      PORT: 3001
+      JWT_SECRET: "${JWT_SECRET}"
+      JWT_EXPIRES: "${JWT_EXPIRES:-3600}"
       # MSSQL connection to the provided StoreDB schema
-      - MSSQL_SERVER=${MSSQL_SERVER:-db}
-      - MSSQL_DB=StoreDB
-      - MSSQL_USER=sa
-      - MSSQL_PASSWORD=inft3050_
-      - MSSQL_ENCRYPT=false
+      MSSQL_SERVER: "${MSSQL_SERVER:-db}"
+      MSSQL_DB: "${MSSQL_DB:-StoreDB}"
+      MSSQL_USER: "${MSSQL_USER:-sa}"
+      MSSQL_PASSWORD: "${MSSQL_SA_PASSWORD}"
+      MSSQL_ENCRYPT: "false"
       # NocoDB proxy target + API token (create a Personal Access Token in NocoDB UI)
-      - NOCO_URL=${NOCO_URL:-http://noco:8080}
-      - NOCO_API_TOKEN=sPi8tSXBw3BgursDPmfAJz8B3mPaHA6FQ9PWZYJZ
+      NOCO_URL: "${NOCO_URL:-http://noco:8080}"
+      NOCO_API_TOKEN: "${NOCO_API_TOKEN:-}"
       # CORS for local React development servers
-      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:3002,http://127.0.0.1:3002
+      CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3002,http://127.0.0.1:3002"
     ports:
       - "3001:3001"

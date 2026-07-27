@@ -13,6 +13,7 @@
 
 # misc
 .DS_Store
+.env
 .env.local
 .env.development.local
 .env.test.local
@@ -24,6 +25,7 @@ yarn-error.log*
 
 # backend local runtime data
 /backend/auth/node_modules
+/backend/.env
 /backend/db
 /backend/noco
 /backend/__MACOSX
