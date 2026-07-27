@@ -2,8 +2,39 @@ import { useState } from 'react';
 import Icon from './Icon';
 import Logo from './Logo';
 
-export default function Header({ navigate, navigationMenus, search, setSearch, cartCount }) {
+const customerAccountLinks = [
+  { label: 'Profile', page: 'account', icon: 'user' },
+  { label: 'Wishlist', page: 'wishlist', icon: 'heart' },
+  { label: 'Order History', page: 'order-history', icon: 'bag' },
+  { label: 'My Library', page: 'my-library', icon: 'play' },
+  { label: 'Payment Methods', page: 'payment-methods', icon: 'lock' },
+  { label: 'Settings', page: 'settings', icon: 'sliders' },
+];
+
+function getAccountLinks(user) {
+  if (user?.role === 'Admin' || user?.isAdmin) {
+    return [
+      { label: 'Profile', page: 'account', icon: 'user' },
+      { label: 'Admin Dashboard', page: 'admin-dashboard', icon: 'sliders' },
+      { label: 'Settings', page: 'settings', icon: 'sliders' },
+    ];
+  }
+
+  if (user?.role === 'Employee') {
+    return [
+      { label: 'Profile', page: 'account', icon: 'user' },
+      { label: 'Employee Dashboard', page: 'employee-dashboard', icon: 'bag' },
+      { label: 'Settings', page: 'settings', icon: 'sliders' },
+    ];
+  }
+
+  return customerAccountLinks;
+}
+
+export default function Header({ navigate, navigationMenus, search, setSearch, cartCount, user }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const accountLinks = getAccountLinks(user);
+  const canShop = !user || user.role === 'Customer';
   const submitSearch = (event) => {
     event.preventDefault();
     navigate('listing');
@@ -19,14 +50,30 @@ export default function Header({ navigate, navigationMenus, search, setSearch, c
             <span className="search-key">/</span>
           </form>
           <div className="header-actions">
-            <button className="icon-button cart-button" onClick={() => navigate('cart')} aria-label="Cart">
-              <Icon name="bag" size={21} />
-              {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
-            </button>
-            <button className="account-button" onClick={() => navigate('account')}>
-              <span>My account</span>
-              <Icon name="chevron" size={14} />
-            </button>
+            {canShop && (
+              <button className="icon-button cart-button" onClick={() => navigate('cart')} aria-label="Cart">
+                <Icon name="bag" size={21} />
+                {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
+              </button>
+            )}
+            <div className="account-menu">
+              <button className="account-button" onClick={() => navigate('account')} aria-haspopup="menu">
+                <span>My account</span>
+                <Icon name="chevron" size={14} />
+              </button>
+              <div className="account-dropdown" role="menu" aria-label="Account menu">
+                <div className="account-dropdown-heading">
+                  <strong>{user ? user.name : 'My account'}</strong>
+                  <small>{user ? user.email : 'Sign in required'}</small>
+                </div>
+                {accountLinks.map((item) => (
+                  <button role="menuitem" type="button" key={item.page} onClick={() => navigate(item.page)}>
+                    <Icon name={item.icon} size={16} />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <button className="mobile-menu" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Toggle menu">
               <Icon name={mobileOpen ? 'close' : 'menu'} />
             </button>

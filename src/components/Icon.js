@@ -14,6 +14,7 @@ const iconPaths = {
   close: <><path d="m6 6 12 12M18 6 6 18" /></>,
   lock: <><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
   mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>,
+  card: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18M7 15h4" /></>,
 };
 
 export default function Icon({ name, size = 20 }) {

@@ -1,28 +1,17 @@
-const DEFAULT_API_BASE_URL = 'http://localhost:3001';
-const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/$/, '');
+import { apiRequest } from './client';
 
 function getQuantity(item) {
   const quantity = Number(item.quantity || 1);
   return Number.isFinite(quantity) && quantity > 0 ? quantity : 1;
 }
 
+// Builds the checkout payload expected by the authenticated order endpoint.
 export async function createOrder(order) {
-  const response = await fetch(`${API_BASE_URL}/orders`, {
+  return apiRequest('/orders', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    credentials: 'include',
     body: JSON.stringify({
-      customerId: order.user?.customerId || order.user?.id || null,
       paymentMethod: order.paymentMethod,
-      totals: {
-        subtotal: order.subtotal,
-        discount: order.discount,
-        tax: order.tax,
-        total: order.total,
-      },
+      address: order.address || {},
       items: order.items.map((item) => ({
         productId: item.id,
         stockItemId: item.stockItemId,
@@ -30,12 +19,19 @@ export async function createOrder(order) {
       })),
     }),
   });
+}
 
-  const payload = await response.json().catch(() => ({}));
+export async function fetchOrders() {
+  const payload = await apiRequest('/orders');
+  return Array.isArray(payload.orders) ? payload.orders : [];
+}
 
-  if (!response.ok) {
-    throw new Error(payload.error || `Order API returned ${response.status}`);
-  }
+export async function fetchOrder(orderId) {
+  const payload = await apiRequest(`/orders/${encodeURIComponent(orderId)}`);
+  return payload.order;
+}
 
-  return payload;
+export async function fetchLibrary() {
+  const payload = await apiRequest('/library');
+  return Array.isArray(payload.items) ? payload.items : [];
 }

@@ -1,73 +1,119 @@
+import { useEffect, useMemo, useState } from 'react';
+import { fetchOrders } from '../api/orders';
 import AccountSideNav from '../components/AccountSideNav';
+import Icon from '../components/Icon';
 
-const orderRows = [
-  ['ORD-1001', '2026-05-20', '2 products', '$39.98', 'Completed', 'View Details'],
-  ['ORD-1002', '2026-05-18', '1 product', '$9.99', 'Refund Requested', 'View Refund'],
-  ['ORD-1003', '2026-05-12', '1 product', '$19.99', 'Refunded', 'View Details'],
-];
+export default function OrderHistoryPage({ user, products, navigate, onOpenOrder }) {
+  const [orders, setOrders] = useState([]);
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('All');
+  const [loading, setLoading] = useState(Boolean(user));
+  const [error, setError] = useState('');
 
-export default function OrderHistoryPage({ navigate }) {
+  useEffect(() => {
+    let ignore = false;
+    if (!user) {
+      setOrders([]);
+      setLoading(false);
+      return () => { ignore = true; };
+    }
+
+    setLoading(true);
+    fetchOrders()
+      .then((records) => {
+        if (!ignore) {
+          setOrders(records);
+          setError('');
+        }
+      })
+      .catch((loadError) => {
+        if (!ignore) setError(loadError.message);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => { ignore = true; };
+  }, [user]);
+
+  const visibleOrders = useMemo(() => orders.filter((order) => {
+    const queryMatches = !query.trim() || String(order.id).toLowerCase().includes(query.trim().toLowerCase());
+    const statusMatches = status === 'All' || order.status === status;
+    return queryMatches && statusMatches;
+  }), [orders, query, status]);
+
+  function openOrder(order) {
+    const enrichedItems = order.items.map((item) => ({
+      ...products.find((product) => String(product.id) === String(item.productId)),
+      ...item,
+      id: item.productId,
+    }));
+    onOpenOrder?.({ ...order, items: enrichedItems });
+  }
+
+  function formatOrderDate(value) {
+    if (!value) return 'Legacy order';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+  }
+
+  if (!user) {
+    return (
+      <main className="account-workspace page-shell">
+        <div className="empty-state">
+          <Icon name="lock" size={30} />
+          <h3>Sign in to view order history</h3>
+          <p>Orders are retrieved from the StoreDB customer record linked to your email.</p>
+          <button className="primary-button" onClick={() => navigate('account')}>Go to Account <Icon name="arrow" /></button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="account-workspace page-shell">
-      <section className="account-workspace-heading">
-        <h1>Page Title: Order History</h1>
-      </section>
-
+      <section className="account-workspace-heading"><h1>Order History</h1></section>
       <div className="account-workspace-layout">
         <AccountSideNav active="order-history" navigate={navigate} />
-
         <section className="account-workspace-main">
-          <div className="workspace-section-label">Search / Filter Orders</div>
-          <form className="workspace-panel order-filter-form" onSubmit={(event) => event.preventDefault()}>
+          <div className="workspace-section-label">StoreDB Orders</div>
+          <div className="workspace-panel order-filter-form">
             <label>
               <span>Search by Order ID</span>
-              <input aria-label="Search by Order ID" />
+              <input aria-label="Search by Order ID" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ORD-8" />
             </label>
             <label>
               <span>Status</span>
-              <select aria-label="Order status" defaultValue="All">
+              <select aria-label="Order status" value={status} onChange={(event) => setStatus(event.target.value)}>
                 <option>All</option>
-                <option>Completed</option>
-                <option>Refund Requested</option>
-                <option>Refunded</option>
+                <option>Paid</option>
               </select>
             </label>
-            <label>
-              <span>Date Range</span>
-              <input aria-label="Date Range" placeholder="____ - ____" />
-            </label>
-            <button type="submit">Search</button>
-          </form>
-
-          <div className="order-table">
-            <div className="order-table-header">
-              <span>Order ID</span>
-              <span>Date</span>
-              <span>Items</span>
-              <span>Total</span>
-              <span>Status</span>
-              <span>Action</span>
+            <div className="workspace-data-note">
+              <strong>{orders.length}</strong>
+              <span>orders linked to this customer</span>
             </div>
-
-            {orderRows.map(([id, date, items, total, status, action]) => (
-              <article className="order-row" key={id}>
-                <span>{id}</span>
-                <span>{date}</span>
-                <span>{items}</span>
-                <span>{total}</span>
-                <span>{status}</span>
-                <button type="button">{action}</button>
-              </article>
-            ))}
           </div>
 
-          <div className="workspace-pagination">
-            <button type="button">&lt;</button>
-            <button type="button">1</button>
-            <button type="button">2</button>
-            <button type="button">3</button>
-            <button type="button">&gt;</button>
-          </div>
+          {loading && <div className="workspace-panel workspace-message">Loading StoreDB orders...</div>}
+          {error && <div className="workspace-panel workspace-error" role="alert">{error}</div>}
+          {!loading && !error && !visibleOrders.length && <div className="workspace-panel workspace-message">No matching orders were found.</div>}
+
+          {!!visibleOrders.length && (
+            <div className="order-table">
+              <div className="order-table-header"><span>Order ID</span><span>Date</span><span>Items</span><span>Total</span><span>Status</span><span>Action</span></div>
+              {visibleOrders.map((order) => (
+                <article className="order-row" key={order.orderId}>
+                  <span>{order.id}</span>
+                  <span>{formatOrderDate(order.createdAt)}</span>
+                  <span>{order.itemCount} item{order.itemCount === 1 ? '' : 's'}</span>
+                  <span>${Number(order.total || 0).toFixed(2)}</span>
+                  <span>{order.status}</span>
+                  <button type="button" onClick={() => openOrder(order)}>View Details</button>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </main>

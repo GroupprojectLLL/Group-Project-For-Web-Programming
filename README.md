@@ -1,88 +1,81 @@
-# Getting Started with Create React App
+# ZeHaoShanGou Online Store
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+React prototype connected to the provided INFT3050 StoreDB through the backend service in `backend/auth`.
 
-## Available Scripts
+## Run the project
 
-In the project directory, you can run:
+1. Put the course database files in `backend/db`. Database files are intentionally excluded from Git.
+2. Create the private backend configuration and follow
+   [`backend/README.md`](backend/README.md) to set the StoreDB password, JWT
+   secret, and NocoDB token:
 
-## Backend Product API
+   ```powershell
+   cd backend
+   Copy-Item .env.example .env
+   ```
 
-This frontend can load product data from the INFT3050 course backend API.
+3. Start the backend services:
 
-Expected local backend:
+   ```powershell
+   docker compose up -d --build
+   ```
 
-```text
-http://localhost:3001/api/inft3050/Product
+4. Start the React application in another PowerShell window:
+
+   ```powershell
+   cd ..
+   npm install
+   npm start
+   ```
+
+5. Open `http://localhost:3000`.
+
+The frontend expects the API at `http://localhost:3001`. To use another address, set `REACT_APP_API_BASE_URL` in a local `.env` file.
+
+## StoreDB integration
+
+- Product browsing loads catalogue, inventory, category, and subcategory data through the protected backend service.
+- Customer registration creates a persistent StoreDB account and customer profile.
+- Login uses the supplied salted SHA-256 password format and an HTTP-only JWT cookie.
+- Customers sign in with email; Employee and Admin accounts can use a username or email.
+- Signed-in customers can update their persisted profile and contact details.
+- Customer, Employee, and Admin sessions are separated while existing course accounts remain supported.
+- Employee accounts are created by an Admin and have read-only access to product, inventory, and account summaries.
+- Checkout validates stock and saves an order atomically.
+- Order History and My Library are generated from the authenticated customer's saved orders.
+- Admin pages provide protected product and account create, update, and delete operations. Customer and staff account models remain separate.
+- Saved prototype cards keep only the last four digits, cardholder name, and expiry. CVV is never stored.
+- Wishlist selections are kept in browser storage for this prototype.
+- Live products do not display fabricated ratings or customer reviews.
+- The 20% strike-through promotion is a frontend presentation rule; the current selling price comes from the backend product data.
+
+The backend is compatible with the StoreDB supplied by the course and does not run schema migrations.
+
+## Main API routes
+
+| Route | Access | Purpose |
+| --- | --- | --- |
+| `POST /register` | Public | Create customer account |
+| `POST /login` | Public | Start authenticated session |
+| `POST /logout` | Signed in | Clear session |
+| `GET /me` | Signed in | Load current account |
+| `PUT /me` | Signed in | Update profile details |
+| `PUT /me/payment-method` | Customer | Save safe prototype card details |
+| `POST /orders` | Customer | Validate stock and create order |
+| `GET /orders` | Customer | Load customer order history |
+| `GET /library` | Customer | Load purchased products |
+| `/staff/products` | Employee or Admin | Read product and inventory records |
+| `/staff/users` | Employee or Admin | Read account summaries |
+| `/admin/products` | Admin | Product CRUD |
+| `/admin/users` | Admin | Customer and staff account management |
+
+## Verification
+
+```powershell
+npm test -- --watchAll=false --runInBand
+npm run build
 ```
 
-The app also reads `Stocktake` for price/stock information and `Genre` for product categories when those endpoints are available. Product subcategories are mapped from the provided database `SubGenre` values, with optional support for the course subgenre endpoints when they are available. If the backend is not running, the app falls back to the local demo products in `src/data.js` so the page does not fail.
+If the product API is unavailable, public product pages fall back to the local demonstration products in `src/data.js`. Authentication, order history, admin management, and database writes do not use fake success responses.
 
-To use a different backend address, create a `.env` file and set:
-
-```text
-REACT_APP_API_BASE_URL=http://localhost:3001
-```
-
-### `npm start`
-
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
-
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
-
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+The immediate confirmation page can display prototype payment details, while later order history uses the information available from the supplied StoreDB.

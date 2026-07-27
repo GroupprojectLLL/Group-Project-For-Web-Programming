@@ -1,49 +1,46 @@
-const accountLinks = [
-  { label: 'Profile', page: 'account' },
-  { label: 'Payment Methods', page: 'payment-methods' },
-  { label: 'Wishlist', page: 'wishlist' },
-  { label: 'Order History', page: 'order-history' },
-  { label: 'My Library', page: 'my-library' },
-  { label: 'Settings', page: 'settings' },
-];
-
 const libraryFilters = [
   { label: 'All Products', value: 'all' },
-  { label: 'My E-books', value: 'E-book' },
-  { label: 'My Games', value: 'Game' },
-  { label: 'My Movies', value: 'Movie' },
-  { label: 'Recently Purchased', value: 'recent' },
-  { label: 'Downloaded Items', value: 'downloaded' },
+  { label: 'My Books', value: 'Books' },
+  { label: 'My Games', value: 'Games' },
+  { label: 'My Movies & TV', value: 'Movies & TV' },
 ];
 
-export default function AccountSideNav({ active, filter = 'all', navigate, onFilterChange, variant = 'account' }) {
-  if (variant === 'library') {
-    return (
-      <aside className="account-side-nav">
-        <span className="side-nav-section-label">Library</span>
-        {libraryFilters.map((item) => (
-          <button
-            className={filter === item.value ? 'active' : ''}
-            key={item.value}
-            onClick={() => onFilterChange?.(item.value)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </aside>
-    );
-  }
+const accountPages = [
+  { label: 'My Library', value: 'my-library' },
+  { label: 'Order History', value: 'order-history' },
+  { label: 'Wishlist', value: 'wishlist' },
+  { label: 'Payment Methods', value: 'payment-methods' },
+];
+
+export default function AccountSideNav({
+  variant = 'account',
+  active,
+  navigate,
+  filter = 'all',
+  onFilterChange,
+  counts = {},
+}) {
+  const isLibraryFilter = variant === 'library';
+  const items = isLibraryFilter ? libraryFilters : accountPages;
+  const selectedValue = isLibraryFilter ? filter : active;
 
   return (
-    <aside className="account-side-nav">
-      <span className="side-nav-section-label">Account</span>
-      {accountLinks.map((item) => (
+    <aside className="account-side-nav" aria-label={isLibraryFilter ? 'Library filters' : 'Account pages'}>
+      <span className="side-nav-section-label">{isLibraryFilter ? 'My Library' : 'My Account'}</span>
+      {items.map((item) => (
         <button
-          className={active === item.page ? 'active' : ''}
-          key={item.page}
-          onClick={() => navigate(item.page)}
+          type="button"
+          className={selectedValue === item.value ? 'active' : ''}
+          key={item.value}
+          onClick={() => {
+            if (isLibraryFilter) onFilterChange?.(item.value);
+            else navigate?.(item.value);
+          }}
+          aria-pressed={selectedValue === item.value}
+          aria-controls={isLibraryFilter ? 'library-results' : undefined}
         >
-          {item.label}
+          <span>{item.label}</span>
+          {isLibraryFilter && <small>{Number(counts[item.value] || 0)}</small>}
         </button>
       ))}
     </aside>
