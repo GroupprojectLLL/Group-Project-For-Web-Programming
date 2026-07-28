@@ -5,14 +5,22 @@ React prototype connected to the provided INFT3050 StoreDB through the backend s
 ## Run the project
 
 1. Put the course database files in `backend/db`. Database files are intentionally excluded from Git.
-2. Start the backend services:
+2. Create the private backend configuration and follow
+   [`backend/README.md`](backend/README.md) to set the StoreDB password, JWT
+   secret, and NocoDB token:
 
    ```powershell
    cd backend
+   Copy-Item .env.example .env
+   ```
+
+3. Start the backend services:
+
+   ```powershell
    docker compose up -d --build
    ```
 
-3. Start the React application in another PowerShell window:
+4. Start the React application in another PowerShell window:
 
    ```powershell
    cd ..
@@ -20,27 +28,28 @@ React prototype connected to the provided INFT3050 StoreDB through the backend s
    npm start
    ```
 
-4. Open `http://localhost:3000`.
+5. Open `http://localhost:3000`.
 
 The frontend expects the API at `http://localhost:3001`. To use another address, set `REACT_APP_API_BASE_URL` in a local `.env` file.
 
 ## StoreDB integration
 
-- Product browsing reads `Product`, `Stocktake`, `Genre`, and the subgenre tables through the protected NocoDB proxy.
-- Registration creates matching authentication and customer records in `User` and `TO`.
+- Product browsing loads catalogue, inventory, category, and subcategory data through the protected backend service.
+- Customer registration creates a persistent StoreDB account and customer profile.
 - Login uses the supplied salted SHA-256 password format and an HTTP-only JWT cookie.
-- Signed-in customers can update their name, email, phone number, and address in the existing `User` and `TO` records.
-- Roles use the supplied schema: an `isAdmin` user is Admin, a non-admin user linked to `TO` is Customer, and a remaining non-admin user is Employee.
+- Customers sign in with email; Employee and Admin accounts can use a username or email.
+- Signed-in customers can update their persisted profile and contact details.
+- Customer, Employee, and Admin sessions are separated while existing course accounts remain supported.
 - Employee accounts are created by an Admin and have read-only access to product, inventory, and account summaries.
-- Checkout writes `Orders` and `ProductsInOrders` in one transaction, validates stock, and reduces `Stocktake.Quantity`.
+- Checkout validates stock and saves an order atomically.
 - Order History and My Library are generated from the authenticated customer's saved orders.
-- Admin pages provide protected product and user create, update, and delete operations, including role assignment.
+- Admin pages provide protected product and account create, update, and delete operations. Customer and staff account models remain separate.
 - Saved prototype cards keep only the last four digits, cardholder name, and expiry. CVV is never stored.
-- Wishlist selections are kept in browser storage because the supplied StoreDB schema has no wishlist table.
-- StoreDB has no rating or review fields, so live products do not display generated ratings or customer reviews.
-- The 20% strike-through promotion is a frontend presentation rule; the current selling price still comes from `Stocktake.Price`.
+- Wishlist selections are kept in browser storage for this prototype.
+- Live products do not display fabricated ratings or customer reviews.
+- The 20% strike-through promotion is a frontend presentation rule; the current selling price comes from the backend product data.
 
-The backend does not create tables or add columns. It writes only to the original course tables, so the project can run against a fresh copy of the supplied StoreDB.
+The backend is compatible with the StoreDB supplied by the course and does not run schema migrations.
 
 ## Main API routes
 
@@ -58,7 +67,7 @@ The backend does not create tables or add columns. It writes only to the origina
 | `/staff/products` | Employee or Admin | Read product and inventory records |
 | `/staff/users` | Employee or Admin | Read account summaries |
 | `/admin/products` | Admin | Product CRUD |
-| `/admin/users` | Admin | User CRUD and role assignment |
+| `/admin/users` | Admin | Customer and staff account management |
 
 ## Verification
 
@@ -69,4 +78,4 @@ npm run build
 
 If the product API is unavailable, public product pages fall back to the local demonstration products in `src/data.js`. Authentication, order history, admin management, and database writes do not use fake success responses.
 
-The original `Orders` and `ProductsInOrders` tables do not contain payment time, payment status, refund status, or historical unit-price fields. The API therefore persists the course-defined order and line records only. The immediate confirmation page can display the current prototype payment details, while later order-history totals are calculated from the linked stock records.
+The immediate confirmation page can display prototype payment details, while later order history uses the information available from the supplied StoreDB.

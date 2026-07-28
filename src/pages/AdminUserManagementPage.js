@@ -5,6 +5,14 @@ import Icon from '../components/Icon';
 
 const emptyUser = { name: '', username: '', email: '', password: '', role: 'Customer' };
 
+function getAccountKey(record) {
+  return record?.accountKey || `${record?.accountSource || 'user'}:${record?.id}`;
+}
+
+function isSameAccount(first, second) {
+  return Boolean(first && second && getAccountKey(first) === getAccountKey(second));
+}
+
 export default function AdminUserManagementPage({ user, navigate }) {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(emptyUser);
@@ -32,7 +40,7 @@ export default function AdminUserManagementPage({ user, navigate }) {
     setError('');
     try {
       const created = await createAdminUser(form);
-      setMessage(`${created.username} created as ${created.role}.`);
+      setMessage(`${created.name || created.email} created as ${created.role}.`);
       setForm(emptyUser);
       await loadUsers();
     } catch (saveError) {
@@ -49,8 +57,8 @@ export default function AdminUserManagementPage({ user, navigate }) {
     setMessage('');
     setError('');
     try {
-      const updated = await updateAdminUser(editingUser.id, editingUser);
-      setMessage(`${updated.username} account details updated.`);
+      const updated = await updateAdminUser(getAccountKey(editingUser), editingUser);
+      setMessage(`${updated.name || updated.email} account details updated.`);
       setEditingUser(null);
       await loadUsers();
     } catch (updateError) {
@@ -65,8 +73,8 @@ export default function AdminUserManagementPage({ user, navigate }) {
     setMessage('');
     setError('');
     try {
-      await deleteAdminUser(record.id);
-      setMessage(`${record.username} deleted.`);
+      await deleteAdminUser(getAccountKey(record));
+      setMessage(`${record.name || record.email} deleted.`);
       await loadUsers();
     } catch (deleteError) {
       setError(deleteError.message);
@@ -84,9 +92,11 @@ export default function AdminUserManagementPage({ user, navigate }) {
           <div className="workspace-section-label">Create Customer, Employee, or Admin</div>
           <form className="workspace-panel admin-form" onSubmit={submitUser}>
             <label><span>Full name</span><input value={form.name} onChange={updateField('name')} required /></label>
-            <label><span>Username</span><input value={form.username} onChange={updateField('username')} minLength="3" required /></label>
+            {form.role !== 'Customer' && (
+              <label><span>Username</span><input value={form.username} onChange={updateField('username')} minLength="3" required /></label>
+            )}
             <label><span>Email</span><input type="email" value={form.email} onChange={updateField('email')} required /></label>
-            <label><span>Temporary password</span><input type="password" value={form.password} onChange={updateField('password')} minLength="8" required /></label>
+            <label><span>Temporary password</span><input type="password" value={form.password} onChange={updateField('password')} minLength="8" autoComplete="new-password" required /></label>
             <label>
               <span>Account role</span>
               <select value={form.role} onChange={updateField('role')}>
@@ -110,11 +120,16 @@ export default function AdminUserManagementPage({ user, navigate }) {
                 <select
                   value={editingUser.role}
                   onChange={(event) => setEditingUser((current) => ({ ...current, role: event.target.value }))}
-                  disabled={editingUser.id === user.id}
+                  disabled={isSameAccount(editingUser, user) || editingUser.originalRole === 'Customer'}
                 >
-                  <option>Customer</option>
-                  <option>Employee</option>
-                  <option>Admin</option>
+                  {editingUser.originalRole === 'Customer' ? (
+                    <option>Customer</option>
+                  ) : (
+                    <>
+                      <option>Employee</option>
+                      <option>Admin</option>
+                    </>
+                  )}
                 </select>
               </label>
               <div className="admin-form-actions">
@@ -126,8 +141,8 @@ export default function AdminUserManagementPage({ user, navigate }) {
           <div className="admin-data-table admin-user-table">
             <div className="admin-data-header"><span>ID</span><span>User</span><span>Email</span><span>Role</span><span>Actions</span></div>
             {users.map((record) => (
-              <article key={record.id}>
-                <span>{record.id}</span>
+              <article key={getAccountKey(record)}>
+                <span>{record.accountSource === 'patron' ? `Patron ${record.id}` : `User ${record.id}`}</span>
                 <span><strong>{record.name || record.username}</strong><small>{record.username}</small></span>
                 <span>{record.email || 'No email'}</span>
                 <span>{record.role}</span>
@@ -135,15 +150,18 @@ export default function AdminUserManagementPage({ user, navigate }) {
                   <button onClick={() => {
                     setEditingUser({
                       id: record.id,
+                      accountSource: record.accountSource,
+                      accountKey: getAccountKey(record),
                       username: record.username,
                       name: record.name || record.username,
                       email: record.email || '',
                       role: record.role,
+                      originalRole: record.role,
                     });
                     setMessage('');
                     setError('');
                   }}>Edit</button>
-                  <button onClick={() => removeUser(record)} disabled={record.id === user.id}>Delete</button>
+                  <button onClick={() => removeUser(record)} disabled={isSameAccount(record, user)}>Delete</button>
                 </span>
               </article>
             ))}

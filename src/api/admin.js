@@ -46,14 +46,14 @@ export async function createAdminUser(user) {
   return payload.user;
 }
 
-export async function updateAdminUser(userId, user) {
-  const payload = await apiRequest(`/admin/users/${encodeURIComponent(userId)}`, {
+export async function updateAdminUser(accountReference, user) {
+  const payload = await apiRequest(`/admin/users/${encodeURIComponent(accountReference)}`, {
     method: 'PUT',
     body: JSON.stringify(user),
   });
   return payload.user;
 }
 
-export async function deleteAdminUser(userId) {
-  return apiRequest(`/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+export async function deleteAdminUser(accountReference) {
+  return apiRequest(`/admin/users/${encodeURIComponent(accountReference)}`, { method: 'DELETE' });
 }

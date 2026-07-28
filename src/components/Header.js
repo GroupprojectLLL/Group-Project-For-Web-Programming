@@ -2,7 +2,7 @@ import { useState } from 'react';
 import Icon from './Icon';
 import Logo from './Logo';
 
-const accountLinks = [
+const customerAccountLinks = [
   { label: 'Profile', page: 'account', icon: 'user' },
   { label: 'Wishlist', page: 'wishlist', icon: 'heart' },
   { label: 'Order History', page: 'order-history', icon: 'bag' },
@@ -11,8 +11,30 @@ const accountLinks = [
   { label: 'Settings', page: 'settings', icon: 'sliders' },
 ];
 
+function getAccountLinks(user) {
+  if (user?.role === 'Admin' || user?.isAdmin) {
+    return [
+      { label: 'Profile', page: 'account', icon: 'user' },
+      { label: 'Admin Dashboard', page: 'admin-dashboard', icon: 'sliders' },
+      { label: 'Settings', page: 'settings', icon: 'sliders' },
+    ];
+  }
+
+  if (user?.role === 'Employee') {
+    return [
+      { label: 'Profile', page: 'account', icon: 'user' },
+      { label: 'Employee Dashboard', page: 'employee-dashboard', icon: 'bag' },
+      { label: 'Settings', page: 'settings', icon: 'sliders' },
+    ];
+  }
+
+  return customerAccountLinks;
+}
+
 export default function Header({ navigate, navigationMenus, search, setSearch, cartCount, user }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const accountLinks = getAccountLinks(user);
+  const canShop = !user || user.role === 'Customer';
   const submitSearch = (event) => {
     event.preventDefault();
     navigate('listing');
@@ -28,10 +50,12 @@ export default function Header({ navigate, navigationMenus, search, setSearch, c
             <span className="search-key">/</span>
           </form>
           <div className="header-actions">
-            <button className="icon-button cart-button" onClick={() => navigate('cart')} aria-label="Cart">
-              <Icon name="bag" size={21} />
-              {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
-            </button>
+            {canShop && (
+              <button className="icon-button cart-button" onClick={() => navigate('cart')} aria-label="Cart">
+                <Icon name="bag" size={21} />
+                {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
+              </button>
+            )}
             <div className="account-menu">
               <button className="account-button" onClick={() => navigate('account')} aria-haspopup="menu">
                 <span>My account</span>

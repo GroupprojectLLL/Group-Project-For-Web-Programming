@@ -4,6 +4,23 @@ The backend combines an Express API, MSSQL StoreDB, and the NocoDB product-data 
 
 ## Start
 
+Create the local configuration file. This file is ignored by Git:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Open `.env` and set the local StoreDB password, a long random JWT secret, and the
+NocoDB personal access token. If NocoDB has not been initialised yet, first start
+the database and NocoDB:
+
+```powershell
+docker compose up -d db noco
+```
+
+Open `http://localhost:8080`, create a Personal Access Token, place it in
+`NOCO_API_TOKEN` in `.env`, and then start the complete backend:
+
 ```powershell
 docker compose up -d --build
 ```
@@ -15,8 +32,8 @@ Expected services:
 - NocoDB: `http://localhost:8080`
 - MSSQL: `localhost:1433`
 
-The `db` and `noco` runtime directories are ignored by Git. Use the StoreDB files supplied by the course; do not include database files in a GitHub or Canvas submission.
+The `.env`, `db`, and `noco` runtime data are ignored by Git. Use the StoreDB files supplied by the course; do not include passwords, tokens, database files, or NocoDB runtime data in a GitHub or Canvas submission.
 
 The Express service implements account sessions, customer registration and profile updates, order transactions, order-history reads, My Library data, safe payment-method storage, employee read-only views, and admin product/user management. Product catalogue reads continue through `/api/inft3050`.
 
-The API does not change the supplied database structure. Customer, Employee, and Admin roles are inferred from the existing `User.isAdmin` field and the user's relationship with `TO`. Checkout writes only the original `Orders` and `ProductsInOrders` fields and updates `Stocktake.Quantity`. Wishlist selections remain a browser preference because StoreDB does not provide a wishlist table.
+The API is designed to work with the course-supplied StoreDB without running schema migrations. It supports Customer, Employee, and Admin workflows, preserves compatibility with existing course accounts, and keeps prototype wishlist selections in the browser.
